@@ -30,6 +30,10 @@ class PaperOrderRequest(BaseModel):
     price: Decimal = Field(gt=0)
 
 
+class PaperPortfolioRequest(BaseModel):
+    prices: dict[str, Decimal]
+
+
 def serialize_order(order: PaperOrder):
     return {
         "symbol": order.symbol,
@@ -82,4 +86,33 @@ def get_paper_account():
                 trading_bot.account.positions.items()
             )
         },
+    }
+@router.post("/paper-portfolio")
+def value_paper_portfolio(
+    request: PaperPortfolioRequest,
+):
+    try:
+        snapshot = trading_bot.paper_portfolio_snapshot(
+            request.prices
+        )
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=str(error),
+        ) from error
+
+    return {
+        "portfolio": {
+            "cash_balance": str(snapshot.cash_balance),
+            "position_values": {
+                symbol: str(value)
+                for symbol, value in sorted(
+                    snapshot.position_values.items()
+                )
+            },
+            "positions_value": str(
+                snapshot.positions_value
+            ),
+            "total_value": str(snapshot.total_value),
+        }
     }

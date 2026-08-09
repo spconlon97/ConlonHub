@@ -12,6 +12,7 @@ Conlon Hub Core is a modular FastAPI application containing the Core service, AI
 - Automated TradingBot safety tests
 - Configurable paper-order value limit
 - Simulated paper cash balance and positions
+- Caller-priced simulated paper portfolio valuation
 
 ## Safety restrictions
 
@@ -21,9 +22,12 @@ Conlon Hub Core is a modular FastAPI application containing the Core service, AI
 - SQLite database files are excluded from Git.
 - The `.env` file and virtual environment are excluded from Git.
 - A single paper order is limited to `1000.00` by default.
-- Rejected orders are not stored.- Paper accounts start with `10000.00` of virtual cash by default.
+- Rejected orders are not stored.
+- Paper accounts start with `10000.00` of virtual cash by default.
 - Paper buys cannot exceed available virtual cash.
 - Paper sells cannot exceed held simulated positions.
+- Portfolio values use caller-supplied simulated prices only.
+- No live pricing or market-data connection is used.
 
 ## Setup
 
@@ -59,7 +63,7 @@ http://127.0.0.1:8000/tradingbot/paper-account
 python -m unittest discover -s tests -v
 ```
 
-The current suite contains twenty TradingBot safety tests.
+The current suite contains twenty-five TradingBot safety tests.
 The local paper-order database is created at `Databases/paper_orders.db` from the repository root. It is generated automatically, survives application restarts, and is excluded from Git.
 
 ## Paper-order API
@@ -94,5 +98,23 @@ View the simulated paper account:
 ```http
 GET /tradingbot/paper-account
 ```
+Value the portfolio with caller-supplied simulated prices:
+
+```http
+POST /tradingbot/paper-portfolio
+Content-Type: application/json
+```
+
+Example request:
+
+```json
+{
+  "prices": {
+    "ETH-GBP": "2600"
+  }
+}
+```
+
+This calculation does not retrieve live prices or place orders.
 
 These endpoints never place real orders.

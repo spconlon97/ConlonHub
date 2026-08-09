@@ -4,6 +4,7 @@ from decimal import Decimal
 from app.modules.tradingbot.models import OrderSide, PaperOrder
 from app.modules.tradingbot.paper_account import PaperAccount
 from app.modules.tradingbot.paper_portfolio import PaperPortfolio
+from app.modules.tradingbot.trading_bot import TradingBot
 
 
 class PaperPortfolioTests(unittest.TestCase):
@@ -93,6 +94,30 @@ class PaperPortfolioTests(unittest.TestCase):
             PaperPortfolio(account).snapshot(
                 {"BTC-GBP": Decimal("0")}
             )
+
+    def test_trading_bot_exposes_portfolio_snapshot(self):
+        account = PaperAccount()
+        bot = TradingBot(account=account)
+
+        bot.place_paper_order(
+            symbol="BTC-GBP",
+            side=OrderSide.BUY,
+            quantity=Decimal("2"),
+            price=Decimal("100"),
+        )
+
+        snapshot = bot.paper_portfolio_snapshot(
+            {"BTC-GBP": Decimal("120")}
+        )
+
+        self.assertEqual(
+            snapshot.positions_value,
+            Decimal("240"),
+        )
+        self.assertEqual(
+            snapshot.total_value,
+            Decimal("10040.00"),
+        )
 
 
 if __name__ == "__main__":

@@ -5,11 +5,12 @@ from app.modules.tradingbot.config import TradingConfig
 from app.modules.tradingbot.models import OrderSide, PaperOrder
 from app.modules.tradingbot.paper_account import PaperAccount
 from app.modules.tradingbot.paper_broker import PaperBroker
+from app.modules.tradingbot.paper_portfolio import PaperPortfolio
 
 
 class TradingBot(ModuleBase):
     name = "Trading Bot"
-    version = "0.6.0"
+    version = "0.7.0"
 
     def __init__(
         self,
@@ -26,6 +27,8 @@ class TradingBot(ModuleBase):
         if account is None:
             for existing_order in self.broker.list_orders():
                 self.account.apply_order(existing_order)
+
+        self.portfolio = PaperPortfolio(self.account)
 
     def start(self):
         return self.status()
@@ -67,3 +70,9 @@ class TradingBot(ModuleBase):
 
     def list_paper_orders(self):
         return self.broker.list_orders()
+
+    def paper_portfolio_snapshot(
+        self,
+        prices: dict[str, Decimal],
+    ):
+        return self.portfolio.snapshot(prices)
