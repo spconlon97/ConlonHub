@@ -1,26 +1,25 @@
-from app.modules.base import ModuleBase
 from app.modules.ai.assistant import AIAssistant
+from app.modules.tradingbot.trading_bot import TradingBot
 
 
 loaded_modules = {}
 
 
 def load_modules():
-
     modules = [
-        AIAssistant()
+        AIAssistant(),
+        TradingBot(),
     ]
 
     for module in modules:
         loaded_modules[module.name] = {
             "name": module.name,
             "version": module.version,
-            "status": module.status()
+            "status": module.status(),
         }
 
 
 def get_loaded_modules():
-
     if not loaded_modules:
         load_modules()
 
