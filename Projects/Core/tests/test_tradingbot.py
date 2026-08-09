@@ -104,6 +104,7 @@ class PaperBrokerPersistenceTests(unittest.TestCase):
 class TradingBotTests(unittest.TestCase):
     def test_reports_paper_ready(self):
         bot = TradingBot()
+        self.assertEqual(bot.version, "0.4.0")
 
         self.assertEqual(bot.status(), "paper-ready")
         self.assertFalse(bot.config.live_trading_enabled)

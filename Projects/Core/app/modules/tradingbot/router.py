@@ -1,14 +1,26 @@
 from decimal import Decimal
+from pathlib import Path
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from app.modules.tradingbot.models import OrderSide, PaperOrder
 from app.modules.tradingbot.trading_bot import TradingBot
+from app.modules.tradingbot.paper_broker import PaperBroker
+from app.modules.tradingbot.sqlite_repository import (
+    SqlitePaperOrderRepository,
+)
 
 
 router = APIRouter(prefix="/tradingbot", tags=["TradingBot"])
-trading_bot = TradingBot()
+database_path = (
+    Path(__file__).resolve().parents[5]
+    / "Databases"
+    / "paper_orders.db"
+)
+repository = SqlitePaperOrderRepository(database_path)
+broker = PaperBroker(repository=repository)
+trading_bot = TradingBot(broker=broker)
 
 
 class PaperOrderRequest(BaseModel):

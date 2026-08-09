@@ -8,7 +8,7 @@ from app.modules.tradingbot.paper_broker import PaperBroker
 
 class TradingBot(ModuleBase):
     name = "Trading Bot"
-    version = "0.3.0"
+    version = "0.4.0"
 
     def __init__(self, config=None, broker=None):
         self.config = config or TradingConfig()
