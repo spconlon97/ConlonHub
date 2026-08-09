@@ -1,10 +1,16 @@
 import unittest
 from decimal import Decimal
 
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from app.modules.tradingbot.config import TradingConfig
 from app.modules.tradingbot.models import OrderSide, PaperOrder
 from app.modules.tradingbot.paper_broker import PaperBroker
 from app.modules.tradingbot.trading_bot import TradingBot
+from app.modules.tradingbot.sqlite_repository import (
+    SqlitePaperOrderRepository,
+)
+
 
 
 class TradingConfigTests(unittest.TestCase):
@@ -56,6 +62,28 @@ class PaperBrokerTests(unittest.TestCase):
 
         self.assertEqual(order.symbol, "BTC-GBP")
         self.assertEqual(broker.list_orders(), (order,))
+
+
+class SqlitePaperOrderRepositoryTests(unittest.TestCase):
+    def test_persists_and_reloads_order(self):
+        with TemporaryDirectory() as temporary_directory:
+            database_path = Path(temporary_directory) / "orders.db"
+            repository = SqlitePaperOrderRepository(database_path)
+
+            order = PaperOrder(
+                symbol="BTC-GBP",
+                side=OrderSide.BUY,
+                quantity=Decimal("0.01"),
+                price=Decimal("50000"),
+            )
+            repository.add(order)
+
+            reloaded_repository = SqlitePaperOrderRepository(database_path)
+
+            self.assertEqual(
+                reloaded_repository.list_all(),
+                (order,),
+            )
 
 
 class TradingBotTests(unittest.TestCase):
