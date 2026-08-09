@@ -104,10 +104,34 @@ class PaperBrokerPersistenceTests(unittest.TestCase):
 class TradingBotTests(unittest.TestCase):
     def test_reports_paper_ready(self):
         bot = TradingBot()
-        self.assertEqual(bot.version, "0.4.0")
+        self.assertEqual(bot.version, "0.5.0")
 
         self.assertEqual(bot.status(), "paper-ready")
         self.assertFalse(bot.config.live_trading_enabled)
+    def test_accepts_order_within_value_limit(self):
+        bot = TradingBot()
+
+        order = bot.place_paper_order(
+            symbol="BTC-GBP",
+            side=OrderSide.BUY,
+            quantity=Decimal("0.01"),
+            price=Decimal("50000"),
+        )
+
+        self.assertEqual(order.total, Decimal("500.00"))
+
+    def test_rejects_order_above_value_limit(self):
+        bot = TradingBot()
+
+        with self.assertRaisesRegex(ValueError, "exceeds maximum"):
+            bot.place_paper_order(
+                symbol="BTC-GBP",
+                side=OrderSide.BUY,
+                quantity=Decimal("0.10"),
+                price=Decimal("50000"),
+            )
+
+        self.assertEqual(bot.list_paper_orders(), ())
 
 
 if __name__ == "__main__":

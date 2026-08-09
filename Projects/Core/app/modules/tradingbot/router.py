@@ -1,7 +1,7 @@
 from decimal import Decimal
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.modules.tradingbot.models import OrderSide, PaperOrder
@@ -43,12 +43,19 @@ def serialize_order(order: PaperOrder):
 
 @router.post("/paper-orders")
 def place_paper_order(request: PaperOrderRequest):
-    order = trading_bot.place_paper_order(
-        symbol=request.symbol,
-        side=request.side,
-        quantity=request.quantity,
-        price=request.price,
-    )
+    try:
+        order = trading_bot.place_paper_order(
+            symbol=request.symbol,
+            side=request.side,
+            quantity=request.quantity,
+            price=request.price,
+        )
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=str(error),
+        ) from error
+
     return {"order": serialize_order(order)}
 
 

@@ -8,7 +8,7 @@ from app.modules.tradingbot.paper_broker import PaperBroker
 
 class TradingBot(ModuleBase):
     name = "Trading Bot"
-    version = "0.4.0"
+    version = "0.5.0"
 
     def __init__(self, config=None, broker=None):
         self.config = config or TradingConfig()
@@ -27,7 +27,20 @@ class TradingBot(ModuleBase):
         quantity: Decimal,
         price: Decimal,
     ) -> PaperOrder:
-        return self.broker.place_order(symbol, side, quantity, price)
+        order_value = quantity * price
+
+        if order_value > self.config.max_order_value:
+            raise ValueError(
+                f"Paper order value {order_value} exceeds "
+                f"maximum of {self.config.max_order_value}."
+            )
+
+        return self.broker.place_order(
+            symbol,
+            side,
+            quantity,
+            price,
+        )
 
     def list_paper_orders(self):
         return self.broker.list_orders()
