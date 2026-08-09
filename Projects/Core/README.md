@@ -7,7 +7,7 @@ Conlon Hub Core is a modular FastAPI application containing the Core service, AI
 - Core health and module-status endpoints
 - AI Assistant module status
 - Paper-only TradingBot
-- Validated in-memory paper orders
+- Validated SQLite-backed paper orders
 - Local paper-order API
 - Automated TradingBot safety tests
 
@@ -15,8 +15,8 @@ Conlon Hub Core is a modular FastAPI application containing the Core service, AI
 
 - Live trading is disabled in code.
 - No exchange connections or API credentials are supported.
-- Paper orders remain in memory only.
-- Simulated orders disappear when the application restarts.
+- Paper orders are stored locally in SQLite and remain simulated.
+- SQLite database files are excluded from Git.
 - The `.env` file and virtual environment are excluded from Git.
 
 ## Setup
@@ -52,7 +52,8 @@ http://127.0.0.1:8000/docs
 python -m unittest discover -s tests -v
 ```
 
-The current suite contains six TradingBot safety tests.
+The current suite contains eight TradingBot safety tests.
+The local paper-order database is created at `Databases/paper_orders.db` from the repository root. It is generated automatically, survives application restarts, and is excluded from Git.
 
 ## Paper-order API
 
