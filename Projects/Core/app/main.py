@@ -3,12 +3,18 @@ from datetime import datetime
 from app.core.registry import get_modules
 from app.core.config import settings
 from app.modules.loader import get_loaded_modules
+from app.modules.tradingbot.router import router as tradingbot_router
+
 
 
 app = FastAPI(
     title=settings.app_name,
     version=settings.version
 )
+
+app.include_router(tradingbot_router)
+
+
 
 
 @app.get("/")
