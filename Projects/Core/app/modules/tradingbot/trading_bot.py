@@ -3,16 +3,29 @@ from decimal import Decimal
 from app.modules.base import ModuleBase
 from app.modules.tradingbot.config import TradingConfig
 from app.modules.tradingbot.models import OrderSide, PaperOrder
+from app.modules.tradingbot.paper_account import PaperAccount
 from app.modules.tradingbot.paper_broker import PaperBroker
 
 
 class TradingBot(ModuleBase):
     name = "Trading Bot"
-    version = "0.5.0"
+    version = "0.6.0"
 
-    def __init__(self, config=None, broker=None):
+    def __init__(
+        self,
+        config=None,
+        broker=None,
+        account=None,
+    ):
         self.config = config or TradingConfig()
         self.broker = broker or PaperBroker()
+        self.account = account or PaperAccount(
+            starting_cash=self.config.starting_cash,
+        )
+
+        if account is None:
+            for existing_order in self.broker.list_orders():
+                self.account.apply_order(existing_order)
 
     def start(self):
         return self.status()
@@ -27,20 +40,30 @@ class TradingBot(ModuleBase):
         quantity: Decimal,
         price: Decimal,
     ) -> PaperOrder:
-        order_value = quantity * price
+        candidate_order = PaperOrder(
+            symbol=symbol.strip().upper(),
+            side=side,
+            quantity=quantity,
+            price=price,
+        )
 
-        if order_value > self.config.max_order_value:
+        if candidate_order.total > self.config.max_order_value:
             raise ValueError(
-                f"Paper order value {order_value} exceeds "
+                f"Paper order value {candidate_order.total} exceeds "
                 f"maximum of {self.config.max_order_value}."
             )
 
-        return self.broker.place_order(
-            symbol,
-            side,
-            quantity,
-            price,
+        self.account.validate_order(candidate_order)
+
+        order = self.broker.place_order(
+            candidate_order.symbol,
+            candidate_order.side,
+            candidate_order.quantity,
+            candidate_order.price,
         )
+        self.account.apply_order(order)
+
+        return order
 
     def list_paper_orders(self):
         return self.broker.list_orders()

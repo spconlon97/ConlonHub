@@ -67,3 +67,19 @@ def list_paper_orders():
             for order in trading_bot.list_paper_orders()
         ]
     }
+@router.get("/paper-account")
+def get_paper_account():
+    return {
+        "starting_cash": str(
+            trading_bot.account.starting_cash
+        ),
+        "cash_balance": str(
+            trading_bot.account.cash_balance
+        ),
+        "positions": {
+            symbol: str(quantity)
+            for symbol, quantity in sorted(
+                trading_bot.account.positions.items()
+            )
+        },
+    }

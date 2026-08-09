@@ -7,13 +7,23 @@ class TradingConfig:
     mode: str = "paper"
     live_trading_enabled: bool = False
     max_order_value: Decimal = Decimal("1000.00")
+    starting_cash: Decimal = Decimal("10000.00")
 
     def __post_init__(self):
         if self.mode != "paper":
-            raise ValueError("Only paper-trading mode is currently supported.")
+            raise ValueError(
+                "Only paper-trading mode is currently supported."
+            )
 
         if self.live_trading_enabled:
             raise ValueError("Live trading is disabled.")
 
         if self.max_order_value <= 0:
-            raise ValueError("Maximum order value must be greater than zero.")
+            raise ValueError(
+                "Maximum order value must be greater than zero."
+            )
+
+        if self.starting_cash <= 0:
+            raise ValueError(
+                "Starting paper cash must be greater than zero."
+            )

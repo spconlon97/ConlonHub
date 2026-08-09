@@ -23,7 +23,7 @@ class PaperAccount:
         normalized_symbol = symbol.strip().upper()
         return self.positions.get(normalized_symbol, Decimal("0"))
 
-    def apply_order(self, order: PaperOrder):
+    def validate_order(self, order: PaperOrder):
         symbol = order.symbol.strip().upper()
 
         if order.side == OrderSide.BUY:
@@ -32,11 +32,6 @@ class PaperAccount:
                     f"Paper order value {order.total} exceeds "
                     f"available cash {self.cash_balance}."
                 )
-
-            self.cash_balance -= order.total
-            self.positions[symbol] = (
-                self.position_for(symbol) + order.quantity
-            )
             return
 
         available_quantity = self.position_for(symbol)
@@ -47,8 +42,21 @@ class PaperAccount:
                 f"only {available_quantity} available."
             )
 
+    def apply_order(self, order: PaperOrder):
+        self.validate_order(order)
+        symbol = order.symbol.strip().upper()
+
+        if order.side == OrderSide.BUY:
+            self.cash_balance -= order.total
+            self.positions[symbol] = (
+                self.position_for(symbol) + order.quantity
+            )
+            return
+
         self.cash_balance += order.total
-        remaining_quantity = available_quantity - order.quantity
+        remaining_quantity = (
+            self.position_for(symbol) - order.quantity
+        )
 
         if remaining_quantity == 0:
             self.positions.pop(symbol)
