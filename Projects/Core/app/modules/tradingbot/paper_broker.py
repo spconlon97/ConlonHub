@@ -4,7 +4,8 @@ from app.modules.tradingbot.models import OrderSide, PaperOrder
 
 
 class PaperBroker:
-    def __init__(self):
+    def __init__(self, repository=None):
+        self.repository = repository
         self._orders = []
 
     def place_order(
@@ -20,8 +21,16 @@ class PaperBroker:
             quantity=quantity,
             price=price,
         )
-        self._orders.append(order)
+
+        if self.repository is None:
+            self._orders.append(order)
+        else:
+            self.repository.add(order)
+
         return order
 
     def list_orders(self):
-        return tuple(self._orders)
+        if self.repository is None:
+            return tuple(self._orders)
+
+        return self.repository.list_all()

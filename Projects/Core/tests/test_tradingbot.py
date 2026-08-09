@@ -85,7 +85,22 @@ class SqlitePaperOrderRepositoryTests(unittest.TestCase):
                 (order,),
             )
 
+class PaperBrokerPersistenceTests(unittest.TestCase):
+    def test_uses_sqlite_repository_when_supplied(self):
+        with TemporaryDirectory() as temporary_directory:
+            repository = SqlitePaperOrderRepository(
+                Path(temporary_directory) / "orders.db"
+            )
+            broker = PaperBroker(repository=repository)
 
+            order = broker.place_order(
+                symbol="btc-gbp",
+                side=OrderSide.BUY,
+                quantity=Decimal("0.01"),
+                price=Decimal("50000"),
+            )
+
+            self.assertEqual(broker.list_orders(), (order,))
 class TradingBotTests(unittest.TestCase):
     def test_reports_paper_ready(self):
         bot = TradingBot()
