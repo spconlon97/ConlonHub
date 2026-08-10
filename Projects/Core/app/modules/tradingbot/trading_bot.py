@@ -5,12 +5,13 @@ from app.modules.tradingbot.config import TradingConfig
 from app.modules.tradingbot.models import OrderSide, PaperOrder
 from app.modules.tradingbot.paper_account import PaperAccount
 from app.modules.tradingbot.paper_broker import PaperBroker
+from app.modules.tradingbot.paper_pnl import PaperPnlCalculator
 from app.modules.tradingbot.paper_portfolio import PaperPortfolio
 
 
 class TradingBot(ModuleBase):
     name = "Trading Bot"
-    version = "0.7.0"
+    version = "0.8.0"
 
     def __init__(
         self,
@@ -29,6 +30,7 @@ class TradingBot(ModuleBase):
                 self.account.apply_order(existing_order)
 
         self.portfolio = PaperPortfolio(self.account)
+        self.pnl = PaperPnlCalculator()
 
     def start(self):
         return self.status()
@@ -76,3 +78,12 @@ class TradingBot(ModuleBase):
         prices: dict[str, Decimal],
     ):
         return self.portfolio.snapshot(prices)
+
+    def paper_pnl_snapshot(
+        self,
+        prices: dict[str, Decimal],
+    ):
+        return self.pnl.snapshot(
+            self.list_paper_orders(),
+            prices,
+        )
