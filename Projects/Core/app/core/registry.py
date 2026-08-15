@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from app.modules.loader import get_loaded_modules
+
 
 modules = {
     "core": {
@@ -29,7 +31,21 @@ modules = {
 
 
 def get_modules():
+    loaded = get_loaded_modules()["modules"]
+
+    reconciled = {}
+    for key, entry in modules.items():
+        loaded_entry = loaded.get(entry["name"])
+        if loaded_entry:
+            reconciled[key] = {
+                **entry,
+                "status": loaded_entry["status"],
+                "version": loaded_entry["version"]
+            }
+        else:
+            reconciled[key] = dict(entry)
+
     return {
-        "modules": modules,
+        "modules": reconciled,
         "updated": datetime.now().isoformat()
     }
