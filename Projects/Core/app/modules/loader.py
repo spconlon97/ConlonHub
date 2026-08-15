@@ -12,6 +12,9 @@ def load_modules():
     ]
 
     for module in modules:
+        module.start()
+
+    for module in modules:
         loaded_modules[module.name] = {
             "name": module.name,
             "version": module.version,
