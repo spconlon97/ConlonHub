@@ -10,3 +10,10 @@ Backups/
 *.db-wal
 *.sqlite
 *.sqlite3
+
+# Projects/Core - local/runtime tool artifacts (not durable project config)
+Projects/Core/.serena/logs/
+Projects/Core/.serena/project.yml.bak
+Projects/Core/.serena/project.yml.broken-*
+Projects/Core/.serena-backup-*/
+Projects/Core/.playwright-mcp/
