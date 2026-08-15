@@ -1,9 +1,10 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from app.modules import loader
 from app.modules.ai.assistant import AIAssistant
 from app.modules.base import ModuleBase
+from app.modules.tradingbot import router as tradingbot_router
 from app.modules.tradingbot.trading_bot import TradingBot
 
 
@@ -98,6 +99,49 @@ class LoadModulesLifecycleTests(unittest.TestCase):
 
     def test_get_module_instance_unknown_name_returns_none(self):
         self.assertIsNone(loader.get_module_instance("Nonexistent Module"))
+
+    def test_register_module_instance_calls_start_once(self):
+        fake = MagicMock()
+        fake.name = "Fake Module"
+        fake.version = "1.0.0"
+        fake.status.return_value = "ok"
+
+        loader.register_module_instance(fake)
+
+        fake.start.assert_called_once_with()
+        self.assertIs(loader.module_instances["Fake Module"], fake)
+        self.assertEqual(
+            loader.loaded_modules["Fake Module"],
+            {"name": "Fake Module", "version": "1.0.0", "status": "ok"},
+        )
+
+    def test_load_modules_reuses_a_preregistered_instance_without_reconstructing(self):
+        sentinel = MagicMock()
+        sentinel.name = "Trading Bot"
+        sentinel.version = "0.7.0"
+        sentinel.status.return_value = "paper-ready"
+        loader.module_instances["Trading Bot"] = sentinel
+
+        with patch("app.modules.loader.TradingBot") as mock_trading_bot_cls:
+            mock_trading_bot_cls.name = "Trading Bot"
+            loader.load_modules()
+
+        mock_trading_bot_cls.assert_not_called()
+        self.assertIs(loader.module_instances["Trading Bot"], sentinel)
+        self.assertIsInstance(loader.module_instances["AI Assistant"], AIAssistant)
+
+
+class RouterTradingBotRegistrationTests(unittest.TestCase):
+    def test_router_and_loader_share_the_same_trading_bot_instance(self):
+        instance = loader.get_module_instance("Trading Bot")
+
+        self.assertIs(instance, tradingbot_router.trading_bot)
+
+    def test_loaded_modules_status_matches_the_real_instance(self):
+        snapshot = loader.get_loaded_modules()["modules"]["Trading Bot"]
+
+        self.assertEqual(snapshot["status"], tradingbot_router.trading_bot.status())
+        self.assertEqual(snapshot["version"], tradingbot_router.trading_bot.version)
 
 
 if __name__ == "__main__":

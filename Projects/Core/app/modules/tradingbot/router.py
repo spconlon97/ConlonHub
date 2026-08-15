@@ -10,6 +10,7 @@ from app.modules.tradingbot.paper_broker import PaperBroker
 from app.modules.tradingbot.sqlite_repository import (
     SqlitePaperOrderRepository,
 )
+from app.modules.loader import register_module_instance
 
 
 router = APIRouter(prefix="/tradingbot", tags=["TradingBot"])
@@ -21,6 +22,7 @@ database_path = (
 repository = SqlitePaperOrderRepository(database_path)
 broker = PaperBroker(repository=repository)
 trading_bot = TradingBot(broker=broker)
+register_module_instance(trading_bot)
 
 
 class PaperOrderRequest(BaseModel):
