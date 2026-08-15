@@ -19,6 +19,7 @@ import unittest
 
 from app.main import app
 from app.modules import loader
+from app.modules.tradingbot import router as tradingbot_router
 
 
 def _make_receive(body=b""):
@@ -105,6 +106,31 @@ class AsgiSmokeTests(unittest.TestCase):
         status, _headers, _body = call_asgi("GET", "/does-not-exist")
 
         self.assertEqual(status, 404)
+
+    def test_paper_account_responds_over_asgi_using_authoritative_instance(self):
+        status, headers, body = call_asgi("GET", "/tradingbot/paper-account")
+
+        account = tradingbot_router.trading_bot.account
+        expected = {
+            "starting_cash": str(account.starting_cash),
+            "cash_balance": str(account.cash_balance),
+            "positions": {
+                symbol: str(quantity)
+                for symbol, quantity in sorted(account.positions.items())
+            },
+        }
+
+        content_types = [
+            value.decode()
+            for name, value in headers
+            if name.decode().lower() == "content-type"
+        ]
+
+        self.assertEqual(status, 200)
+        self.assertTrue(
+            any(ct.startswith("application/json") for ct in content_types)
+        )
+        self.assertEqual(json.loads(body), expected)
 
 
 if __name__ == "__main__":
