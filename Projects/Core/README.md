@@ -117,4 +117,23 @@ Example request:
 
 This calculation does not retrieve live prices or place orders.
 
+Calculate realized and unrealized profit and loss with caller-supplied simulated prices:
+
+```http
+POST /tradingbot/paper-pnl
+Content-Type: application/json
+```
+
+Example request:
+
+```json
+{
+  "prices": {
+    "ETH-GBP": "2600"
+  }
+}
+```
+
+This calculation does not retrieve live prices or place orders.
+
 These endpoints never place real orders.

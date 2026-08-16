@@ -133,6 +133,37 @@ class TradingBotTests(unittest.TestCase):
 
         self.assertEqual(bot.list_paper_orders(), ())
 
+    def test_paper_pnl_snapshot_delegates_to_calculator(self):
+        bot = TradingBot()
+        bot.place_paper_order(
+            symbol="BTC-GBP",
+            side=OrderSide.BUY,
+            quantity=Decimal("0.01"),
+            price=Decimal("50000"),
+        )
+
+        snapshot = bot.paper_pnl_snapshot({"BTC-GBP": Decimal("60000")})
+
+        self.assertEqual(snapshot.realized_pnl, Decimal("0"))
+        self.assertEqual(snapshot.unrealized_pnl, Decimal("100.00"))
+        self.assertEqual(snapshot.total_pnl, Decimal("100.00"))
+        self.assertEqual(
+            snapshot.average_costs["BTC-GBP"],
+            Decimal("50000"),
+        )
+
+    def test_paper_pnl_snapshot_requires_price_for_open_position(self):
+        bot = TradingBot()
+        bot.place_paper_order(
+            symbol="BTC-GBP",
+            side=OrderSide.BUY,
+            quantity=Decimal("0.01"),
+            price=Decimal("50000"),
+        )
+
+        with self.assertRaisesRegex(ValueError, "Missing simulated price"):
+            bot.paper_pnl_snapshot({})
+
 
 if __name__ == "__main__":
     unittest.main()

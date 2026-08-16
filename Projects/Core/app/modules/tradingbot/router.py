@@ -118,3 +118,32 @@ def value_paper_portfolio(
             "total_value": str(snapshot.total_value),
         }
     }
+
+
+@router.post("/paper-pnl")
+def value_paper_pnl(
+    request: PaperPortfolioRequest,
+):
+    try:
+        snapshot = trading_bot.paper_pnl_snapshot(
+            request.prices
+        )
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=str(error),
+        ) from error
+
+    return {
+        "pnl": {
+            "realized_pnl": str(snapshot.realized_pnl),
+            "unrealized_pnl": str(snapshot.unrealized_pnl),
+            "total_pnl": str(snapshot.total_pnl),
+            "average_costs": {
+                symbol: str(value)
+                for symbol, value in sorted(
+                    snapshot.average_costs.items()
+                )
+            },
+        }
+    }

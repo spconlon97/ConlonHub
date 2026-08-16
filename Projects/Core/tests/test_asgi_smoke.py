@@ -16,6 +16,7 @@ startup behaviour and give a false pass.
 import asyncio
 import json
 import unittest
+from decimal import Decimal
 
 from app.main import app
 from app.modules import loader
@@ -35,7 +36,7 @@ def _make_receive(body=b""):
     return receive
 
 
-async def _call_asgi(method, path):
+async def _call_asgi(method, path, body=b"", headers=None):
     scope = {
         "type": "http",
         "asgi": {"version": "3.0", "spec_version": "2.3"},
@@ -44,7 +45,7 @@ async def _call_asgi(method, path):
         "path": path,
         "raw_path": path.encode(),
         "query_string": b"",
-        "headers": [],
+        "headers": headers or [],
         "server": ("testserver", 80),
         "client": ("testclient", 123),
         "scheme": "http",
@@ -57,7 +58,7 @@ async def _call_asgi(method, path):
     async def send(message):
         messages.append(message)
 
-    await app(scope, _make_receive(), send)
+    await app(scope, _make_receive(body), send)
 
     start = next(m for m in messages if m["type"] == "http.response.start")
     body = b"".join(
@@ -67,8 +68,8 @@ async def _call_asgi(method, path):
     return start["status"], start["headers"], body
 
 
-def call_asgi(method, path):
-    return asyncio.run(_call_asgi(method, path))
+def call_asgi(method, path, body=b"", headers=None):
+    return asyncio.run(_call_asgi(method, path, body, headers))
 
 
 class AsgiSmokeTests(unittest.TestCase):
@@ -118,6 +119,47 @@ class AsgiSmokeTests(unittest.TestCase):
                 symbol: str(quantity)
                 for symbol, quantity in sorted(account.positions.items())
             },
+        }
+
+        content_types = [
+            value.decode()
+            for name, value in headers
+            if name.decode().lower() == "content-type"
+        ]
+
+        self.assertEqual(status, 200)
+        self.assertTrue(
+            any(ct.startswith("application/json") for ct in content_types)
+        )
+        self.assertEqual(json.loads(body), expected)
+
+    def test_paper_pnl_responds_over_asgi_using_authoritative_instance(self):
+        account = tradingbot_router.trading_bot.account
+        prices = {symbol: Decimal("1") for symbol in account.positions}
+        payload = json.dumps(
+            {"prices": {symbol: str(price) for symbol, price in prices.items()}}
+        ).encode()
+
+        status, headers, body = call_asgi(
+            "POST",
+            "/tradingbot/paper-pnl",
+            body=payload,
+            headers=[(b"content-type", b"application/json")],
+        )
+
+        expected_snapshot = tradingbot_router.trading_bot.paper_pnl_snapshot(prices)
+        expected = {
+            "pnl": {
+                "realized_pnl": str(expected_snapshot.realized_pnl),
+                "unrealized_pnl": str(expected_snapshot.unrealized_pnl),
+                "total_pnl": str(expected_snapshot.total_pnl),
+                "average_costs": {
+                    symbol: str(value)
+                    for symbol, value in sorted(
+                        expected_snapshot.average_costs.items()
+                    )
+                },
+            }
         }
 
         content_types = [
