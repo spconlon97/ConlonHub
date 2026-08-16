@@ -16,9 +16,12 @@ startup behaviour and give a false pass.
 import asyncio
 import json
 import unittest
+from datetime import datetime
 from decimal import Decimal
 from unittest.mock import patch
 
+from app.core import registry
+from app.core.config import settings
 from app.main import app
 from app.modules import loader
 from app.modules.tradingbot import router as tradingbot_router
@@ -403,6 +406,78 @@ class AsgiSmokeTests(unittest.TestCase):
         self.assertEqual(
             tradingbot_router.trading_bot.list_paper_orders(),
             original_orders,
+        )
+
+    def test_root_responds_over_asgi(self):
+        status, headers, body = call_asgi("GET", "/")
+
+        content_types = [
+            value.decode()
+            for name, value in headers
+            if name.decode().lower() == "content-type"
+        ]
+
+        self.assertEqual(status, 200)
+        self.assertTrue(
+            any(ct.startswith("application/json") for ct in content_types)
+        )
+
+        payload = json.loads(body)
+        self.assertEqual(
+            set(payload.keys()),
+            {"system", "module", "environment", "status", "time"},
+        )
+        self.assertEqual(payload["system"], settings.app_name)
+        self.assertEqual(payload["module"], "Core")
+        self.assertEqual(payload["environment"], settings.environment)
+        self.assertEqual(payload["status"], "online")
+        self.assertIsInstance(payload["time"], str)
+        # Raises if not a valid ISO 8601 timestamp; value itself is dynamic.
+        datetime.fromisoformat(payload["time"])
+
+    def test_modules_responds_over_asgi(self):
+        status, headers, body = call_asgi("GET", "/modules")
+
+        content_types = [
+            value.decode()
+            for name, value in headers
+            if name.decode().lower() == "content-type"
+        ]
+
+        self.assertEqual(status, 200)
+        self.assertTrue(
+            any(ct.startswith("application/json") for ct in content_types)
+        )
+
+        payload = json.loads(body)
+        self.assertEqual(set(payload.keys()), {"modules", "updated"})
+        self.assertIsInstance(payload["updated"], str)
+        datetime.fromisoformat(payload["updated"])
+
+        modules = payload["modules"]
+        self.assertEqual(set(modules.keys()), set(registry.modules.keys()))
+
+        loaded = loader.loaded_modules
+        self.assertIn("AI Assistant", loaded)
+        self.assertIn("Trading Bot", loaded)
+
+        self.assertEqual(modules["core"], registry.modules["core"])
+        self.assertEqual(modules["home"], registry.modules["home"])
+        self.assertEqual(
+            modules["ai"],
+            {
+                **registry.modules["ai"],
+                "status": loaded["AI Assistant"]["status"],
+                "version": loaded["AI Assistant"]["version"],
+            },
+        )
+        self.assertEqual(
+            modules["trading"],
+            {
+                **registry.modules["trading"],
+                "status": loaded["Trading Bot"]["status"],
+                "version": loaded["Trading Bot"]["version"],
+            },
         )
 
 
