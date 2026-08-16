@@ -5,9 +5,11 @@ import unittest
 from contextlib import closing
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
+from app.core.auth.audit import SqliteAuditRepository
 from app.core.auth.credentials import generate_api_key, hash_api_key
-from app.core.auth.dependency import get_auth_repository
+from app.core.auth.dependency import get_audit_repository, get_auth_repository
 from app.core.auth.principal import Principal
 from app.core.auth.repository import SqliteAuthRepository
 from app.main import app
@@ -70,12 +72,28 @@ class _FailingRepository:
         raise AssertionError("get_principal should not be reached")
 
 
+class _FailingAuditRepository:
+    def record_event(self, **kwargs):
+        raise sqlite3.OperationalError("simulated audit failure")
+
+
+class _NoOpAuditRepository:
+    def record_event(self, **kwargs):
+        return None
+
+
 _repository_call_count = []
+_audit_call_count = []
 
 
 def _repository_must_not_be_called():
     _repository_call_count.append(True)
     raise AssertionError("repository dependency should not be reached")
+
+
+def _audit_must_not_be_called():
+    _audit_call_count.append(True)
+    raise AssertionError("audit dependency should not be reached")
 
 
 def _seed_repository(temp_dir, principal_id="p-1", name="Test Principal"):
@@ -91,6 +109,18 @@ def _seed_repository(temp_dir, principal_id="p-1", name="Test Principal"):
     return repository, principal, issued.token
 
 
+def _seed_audit_repository(temp_dir):
+    return SqliteAuditRepository(Path(temp_dir) / "audit.db")
+
+
+def _audit_rows(audit_repository):
+    with closing(sqlite3.connect(audit_repository.database_path)) as connection:
+        return connection.execute(
+            "SELECT event_id, occurred_at, principal_id, key_id, "
+            "event_type, outcome, method, path FROM audit_events"
+        ).fetchall()
+
+
 def _www_authenticate(headers):
     return [v for k, v in headers if k.lower() == b"www-authenticate"]
 
@@ -99,6 +129,8 @@ class AuthAsgiTests(unittest.TestCase):
     def setUp(self):
         self._original_overrides = dict(app.dependency_overrides)
         _repository_call_count.clear()
+        _audit_call_count.clear()
+        app.dependency_overrides[get_audit_repository] = lambda: _NoOpAuditRepository()
 
     def tearDown(self):
         app.dependency_overrides.clear()
@@ -137,31 +169,37 @@ class AuthAsgiTests(unittest.TestCase):
             payload = json.loads(body)
             self.assertEqual(set(payload.keys()), {"principal_id", "name"})
 
-    # --- 401 : HTTPBearer-level failures (repository must never be reached) --
+    # --- 401 : HTTPBearer-level failures (repository/audit must never be
+    # reached; Checkpoint 4 does not audit these cases) ---------------------
 
     def test_missing_authorization_header_returns_401(self):
         app.dependency_overrides[get_auth_repository] = _repository_must_not_be_called
+        app.dependency_overrides[get_audit_repository] = _audit_must_not_be_called
 
         status_code, headers, body = call_asgi("GET", "/auth/whoami")
 
         self.assertEqual(status_code, 401)
         self.assertEqual(json.loads(body), {"detail": "Not authenticated"})
         self.assertEqual(_www_authenticate(headers), [b"Bearer"])
+        self.assertEqual(_audit_call_count, [])
 
     def test_missing_authorization_does_not_resolve_repository(self):
         # Distinct from test_missing_authorization_header_returns_401: this
         # test's purpose is specifically to prove the repository dependency
         # is never resolved, not merely that the response happens to be 401.
         app.dependency_overrides[get_auth_repository] = _repository_must_not_be_called
+        app.dependency_overrides[get_audit_repository] = _audit_must_not_be_called
 
         status_code, _headers, body = call_asgi("GET", "/auth/whoami")
 
         self.assertEqual(status_code, 401)
         self.assertEqual(json.loads(body), {"detail": "Not authenticated"})
         self.assertEqual(_repository_call_count, [])
+        self.assertEqual(_audit_call_count, [])
 
     def test_wrong_scheme_returns_401(self):
         app.dependency_overrides[get_auth_repository] = _repository_must_not_be_called
+        app.dependency_overrides[get_audit_repository] = _audit_must_not_be_called
 
         status_code, headers, body = call_asgi(
             "GET",
@@ -173,9 +211,11 @@ class AuthAsgiTests(unittest.TestCase):
         self.assertEqual(json.loads(body), {"detail": "Not authenticated"})
         self.assertEqual(_www_authenticate(headers), [b"Bearer"])
         self.assertEqual(_repository_call_count, [])
+        self.assertEqual(_audit_call_count, [])
 
     def test_bare_or_malformed_authorization_scheme_returns_401(self):
         app.dependency_overrides[get_auth_repository] = _repository_must_not_be_called
+        app.dependency_overrides[get_audit_repository] = _audit_must_not_be_called
 
         status_code, headers, body = call_asgi(
             "GET",
@@ -187,6 +227,7 @@ class AuthAsgiTests(unittest.TestCase):
         self.assertEqual(json.loads(body), {"detail": "Not authenticated"})
         self.assertEqual(_www_authenticate(headers), [b"Bearer"])
         self.assertEqual(_repository_call_count, [])
+        self.assertEqual(_audit_call_count, [])
 
     # --- 401 : credential-invalid failures (repository-backed) -------------
 
@@ -360,6 +401,319 @@ class AuthAsgiTests(unittest.TestCase):
         for path in ("/", "/modules", "/tradingbot/paper-account", "/ai/status"):
             status_code, _headers, _body = call_asgi("GET", path)
             self.assertEqual(status_code, 200, msg=f"{path} should remain open")
+
+    # --- audit event recording ---------------------------------------------
+
+    def test_successful_auth_records_success_event(self):
+        with TemporaryDirectory() as auth_dir, TemporaryDirectory() as audit_dir:
+            repository, principal, token = _seed_repository(auth_dir)
+            audit_repository = _seed_audit_repository(audit_dir)
+            app.dependency_overrides[get_auth_repository] = lambda: repository
+            app.dependency_overrides[get_audit_repository] = lambda: audit_repository
+
+            status_code, _headers, _body = call_asgi(
+                "GET",
+                "/auth/whoami",
+                headers=[(b"authorization", f"Bearer {token}".encode())],
+            )
+
+            self.assertEqual(status_code, 200)
+            rows = _audit_rows(audit_repository)
+            self.assertEqual(len(rows), 1)
+            _eid, _oa, principal_id, key_id, event_type, outcome, method, path = rows[0]
+            self.assertEqual(principal_id, principal.principal_id)
+            self.assertEqual(key_id, token.split(".", 1)[0])
+            self.assertEqual(event_type, "auth.whoami")
+            self.assertEqual(outcome, "success")
+            self.assertEqual(method, "GET")
+            self.assertEqual(path, "/auth/whoami")
+
+    def test_malformed_token_records_rejected_event_with_null_key_id(self):
+        with TemporaryDirectory() as auth_dir, TemporaryDirectory() as audit_dir:
+            repository, _principal, _token = _seed_repository(auth_dir)
+            audit_repository = _seed_audit_repository(audit_dir)
+            app.dependency_overrides[get_auth_repository] = lambda: repository
+            app.dependency_overrides[get_audit_repository] = lambda: audit_repository
+
+            call_asgi(
+                "GET",
+                "/auth/whoami",
+                headers=[(b"authorization", b"Bearer not-a-valid-token")],
+            )
+
+            rows = _audit_rows(audit_repository)
+            self.assertEqual(len(rows), 1)
+            self.assertIsNone(rows[0][2])
+            self.assertIsNone(rows[0][3])
+            self.assertEqual(rows[0][5], "rejected")
+
+    def test_unknown_key_id_records_rejected_event_with_null_key_id(self):
+        with TemporaryDirectory() as auth_dir, TemporaryDirectory() as audit_dir:
+            repository, _principal, _token = _seed_repository(auth_dir)
+            audit_repository = _seed_audit_repository(audit_dir)
+            app.dependency_overrides[get_auth_repository] = lambda: repository
+            app.dependency_overrides[get_audit_repository] = lambda: audit_repository
+
+            call_asgi(
+                "GET",
+                "/auth/whoami",
+                headers=[
+                    (b"authorization", b"Bearer unknown-key-id-value.some-secret")
+                ],
+            )
+
+            rows = _audit_rows(audit_repository)
+            self.assertEqual(len(rows), 1)
+            self.assertIsNone(rows[0][2])
+            self.assertIsNone(rows[0][3])
+            self.assertEqual(rows[0][5], "rejected")
+
+    def test_wrong_secret_records_rejected_event_with_known_key_id(self):
+        with TemporaryDirectory() as auth_dir, TemporaryDirectory() as audit_dir:
+            repository, _principal, token = _seed_repository(auth_dir)
+            audit_repository = _seed_audit_repository(audit_dir)
+            app.dependency_overrides[get_auth_repository] = lambda: repository
+            app.dependency_overrides[get_audit_repository] = lambda: audit_repository
+
+            key_id = token.split(".", 1)[0]
+            call_asgi(
+                "GET",
+                "/auth/whoami",
+                headers=[
+                    (b"authorization", f"Bearer {key_id}.wrong-secret".encode())
+                ],
+            )
+
+            rows = _audit_rows(audit_repository)
+            self.assertEqual(len(rows), 1)
+            self.assertIsNone(rows[0][2])
+            self.assertEqual(rows[0][3], key_id)
+            self.assertEqual(rows[0][5], "rejected")
+
+    def test_corrupted_verifier_records_error_event_without_sensitive_material(self):
+        with TemporaryDirectory() as auth_dir, TemporaryDirectory() as audit_dir:
+            repository, _principal, token = _seed_repository(auth_dir)
+            audit_repository = _seed_audit_repository(audit_dir)
+            key_id = token.split(".", 1)[0]
+            with closing(sqlite3.connect(repository.database_path)) as connection:
+                connection.execute(
+                    "UPDATE api_keys SET digest = ? WHERE key_id = ?",
+                    (b"\x00" * 4, key_id),
+                )
+                connection.commit()
+            app.dependency_overrides[get_auth_repository] = lambda: repository
+            app.dependency_overrides[get_audit_repository] = lambda: audit_repository
+
+            call_asgi(
+                "GET",
+                "/auth/whoami",
+                headers=[(b"authorization", f"Bearer {token}".encode())],
+            )
+
+            rows = _audit_rows(audit_repository)
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0][3], key_id)
+            self.assertEqual(rows[0][5], "error")
+            # audit_events has no salt/digest columns and record_event's
+            # signature does not accept them, so the corrupted digest is
+            # structurally incapable of reaching this database. The
+            # meaningful leak check is that the *other* repository's
+            # (auth DB) path never appears in the audit DB's raw bytes.
+            raw_bytes = audit_repository.database_path.read_bytes()
+            self.assertNotIn(str(repository.database_path).encode(), raw_bytes)
+
+    def test_missing_principal_records_error_event(self):
+        with TemporaryDirectory() as auth_dir, TemporaryDirectory() as audit_dir:
+            repository, principal, token = _seed_repository(auth_dir)
+            audit_repository = _seed_audit_repository(audit_dir)
+            app.dependency_overrides[get_auth_repository] = lambda: repository
+            app.dependency_overrides[get_audit_repository] = lambda: audit_repository
+
+            with closing(sqlite3.connect(repository.database_path)) as connection:
+                connection.execute(
+                    "DELETE FROM principals WHERE principal_id = ?",
+                    (principal.principal_id,),
+                )
+                connection.commit()
+
+            call_asgi(
+                "GET",
+                "/auth/whoami",
+                headers=[(b"authorization", f"Bearer {token}".encode())],
+            )
+
+            rows = _audit_rows(audit_repository)
+            self.assertEqual(len(rows), 1)
+            self.assertIsNone(rows[0][2])
+            self.assertEqual(rows[0][3], token.split(".", 1)[0])
+            self.assertEqual(rows[0][5], "error")
+
+    def test_unexpected_repository_failure_records_error_event_with_null_key_id(self):
+        with TemporaryDirectory() as audit_dir:
+            audit_repository = _seed_audit_repository(audit_dir)
+            app.dependency_overrides[get_auth_repository] = lambda: _FailingRepository()
+            app.dependency_overrides[get_audit_repository] = lambda: audit_repository
+
+            call_asgi(
+                "GET",
+                "/auth/whoami",
+                headers=[(b"authorization", b"Bearer some-key-id.some-secret")],
+            )
+
+            rows = _audit_rows(audit_repository)
+            self.assertEqual(len(rows), 1)
+            self.assertIsNone(rows[0][3])
+            self.assertEqual(rows[0][5], "error")
+
+    # --- audit write failure never changes the auth outcome ----------------
+
+    def test_audit_failure_does_not_change_successful_response(self):
+        with TemporaryDirectory() as auth_dir:
+            repository, principal, token = _seed_repository(auth_dir)
+            app.dependency_overrides[get_auth_repository] = lambda: repository
+            app.dependency_overrides[get_audit_repository] = (
+                lambda: _FailingAuditRepository()
+            )
+
+            status_code, _headers, body = call_asgi(
+                "GET",
+                "/auth/whoami",
+                headers=[(b"authorization", f"Bearer {token}".encode())],
+            )
+
+            self.assertEqual(status_code, 200)
+            self.assertEqual(
+                json.loads(body),
+                {"principal_id": principal.principal_id, "name": principal.name},
+            )
+
+    def test_audit_failure_does_not_change_rejected_response(self):
+        with TemporaryDirectory() as auth_dir:
+            repository, _principal, token = _seed_repository(auth_dir)
+            key_id = token.split(".", 1)[0]
+            app.dependency_overrides[get_auth_repository] = lambda: repository
+            app.dependency_overrides[get_audit_repository] = (
+                lambda: _FailingAuditRepository()
+            )
+
+            status_code, headers, body = call_asgi(
+                "GET",
+                "/auth/whoami",
+                headers=[
+                    (b"authorization", f"Bearer {key_id}.wrong-secret".encode())
+                ],
+            )
+
+            self.assertEqual(status_code, 401)
+            self.assertEqual(json.loads(body), {"detail": "Not authenticated"})
+            self.assertEqual(_www_authenticate(headers), [b"Bearer"])
+
+    def test_audit_failure_does_not_change_server_error_response(self):
+        with TemporaryDirectory() as auth_dir:
+            repository, _principal, token = _seed_repository(auth_dir)
+            key_id = token.split(".", 1)[0]
+            with closing(sqlite3.connect(repository.database_path)) as connection:
+                connection.execute(
+                    "UPDATE api_keys SET digest = ? WHERE key_id = ?",
+                    (b"\x00" * 4, key_id),
+                )
+                connection.commit()
+            app.dependency_overrides[get_auth_repository] = lambda: repository
+            app.dependency_overrides[get_audit_repository] = (
+                lambda: _FailingAuditRepository()
+            )
+
+            status_code, _headers, body = call_asgi(
+                "GET",
+                "/auth/whoami",
+                headers=[(b"authorization", f"Bearer {token}".encode())],
+            )
+
+            self.assertEqual(status_code, 500)
+            self.assertEqual(json.loads(body), {"detail": "Internal server error"})
+
+    # --- audit initialization failure ---------------------------------------
+
+    def test_get_audit_repository_returns_none_on_sqlite_error_during_construction(
+        self,
+    ):
+        with patch(
+            "app.core.auth.dependency.SqliteAuditRepository",
+            side_effect=sqlite3.OperationalError("simulated init failure"),
+        ):
+            result = get_audit_repository()
+
+        self.assertIsNone(result)
+
+    def test_get_audit_repository_returns_none_on_oserror_during_construction(self):
+        with patch(
+            "app.core.auth.dependency.SqliteAuditRepository",
+            side_effect=OSError("simulated filesystem failure"),
+        ):
+            result = get_audit_repository()
+
+        self.assertIsNone(result)
+
+    def test_audit_initialization_failure_does_not_change_successful_response(self):
+        with TemporaryDirectory() as auth_dir:
+            repository, principal, token = _seed_repository(auth_dir)
+            app.dependency_overrides[get_auth_repository] = lambda: repository
+            app.dependency_overrides[get_audit_repository] = lambda: None
+
+            status_code, _headers, body = call_asgi(
+                "GET",
+                "/auth/whoami",
+                headers=[(b"authorization", f"Bearer {token}".encode())],
+            )
+
+            self.assertEqual(status_code, 200)
+            self.assertEqual(
+                json.loads(body),
+                {"principal_id": principal.principal_id, "name": principal.name},
+            )
+
+    def test_audit_initialization_failure_does_not_change_rejected_response(self):
+        with TemporaryDirectory() as auth_dir:
+            repository, _principal, token = _seed_repository(auth_dir)
+            key_id = token.split(".", 1)[0]
+            app.dependency_overrides[get_auth_repository] = lambda: repository
+            app.dependency_overrides[get_audit_repository] = lambda: None
+
+            status_code, headers, body = call_asgi(
+                "GET",
+                "/auth/whoami",
+                headers=[
+                    (b"authorization", f"Bearer {key_id}.wrong-secret".encode())
+                ],
+            )
+
+            self.assertEqual(status_code, 401)
+            self.assertEqual(json.loads(body), {"detail": "Not authenticated"})
+            self.assertEqual(_www_authenticate(headers), [b"Bearer"])
+
+    def test_audit_initialization_failure_does_not_change_server_error_response(
+        self,
+    ):
+        with TemporaryDirectory() as auth_dir:
+            repository, _principal, token = _seed_repository(auth_dir)
+            key_id = token.split(".", 1)[0]
+            with closing(sqlite3.connect(repository.database_path)) as connection:
+                connection.execute(
+                    "UPDATE api_keys SET digest = ? WHERE key_id = ?",
+                    (b"\x00" * 4, key_id),
+                )
+                connection.commit()
+            app.dependency_overrides[get_auth_repository] = lambda: repository
+            app.dependency_overrides[get_audit_repository] = lambda: None
+
+            status_code, _headers, body = call_asgi(
+                "GET",
+                "/auth/whoami",
+                headers=[(b"authorization", f"Bearer {token}".encode())],
+            )
+
+            self.assertEqual(status_code, 500)
+            self.assertEqual(json.loads(body), {"detail": "Internal server error"})
 
 
 if __name__ == "__main__":
