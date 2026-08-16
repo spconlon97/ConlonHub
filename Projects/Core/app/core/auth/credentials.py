@@ -34,6 +34,10 @@ def _is_urlsafe_token_component(value) -> bool:
     return len(value) > 0 and all(char in _URLSAFE_ALPHABET for char in value)
 
 
+def is_valid_key_id(value) -> bool:
+    return _is_urlsafe_token_component(value)
+
+
 @dataclass(frozen=True)
 class IssuedApiKey:
     key_id: str
@@ -41,7 +45,7 @@ class IssuedApiKey:
     token: str
 
     def __post_init__(self):
-        if not _is_urlsafe_token_component(self.key_id):
+        if not is_valid_key_id(self.key_id):
             raise ValueError("key_id must be a non-empty URL-safe string.")
 
         if not _is_urlsafe_token_component(self.secret):
@@ -64,7 +68,7 @@ class ParsedApiKey:
     secret: str
 
     def __post_init__(self):
-        if not _is_urlsafe_token_component(self.key_id):
+        if not is_valid_key_id(self.key_id):
             raise ValueError("key_id must be a non-empty URL-safe string.")
 
         if not _is_urlsafe_token_component(self.secret):
