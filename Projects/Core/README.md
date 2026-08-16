@@ -63,7 +63,7 @@ http://127.0.0.1:8000/tradingbot/paper-account
 python -m unittest discover -s tests -v
 ```
 
-The current suite contains twenty-five TradingBot safety tests.
+The suite covers TradingBot safety behaviour, the Core module registry and loader, the AI Assistant router, and ASGI-level smoke tests exercising the assembled application end to end.
 The local paper-order database is created at `Databases/paper_orders.db` from the repository root. It is generated automatically, survives application restarts, and is excluded from Git.
 
 ## Paper-order API
