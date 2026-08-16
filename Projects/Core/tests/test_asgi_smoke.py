@@ -22,6 +22,7 @@ from unittest.mock import patch
 from app.main import app
 from app.modules import loader
 from app.modules.tradingbot import router as tradingbot_router
+from app.modules.tradingbot.models import OrderSide
 from app.modules.tradingbot.trading_bot import TradingBot
 
 
@@ -135,21 +136,34 @@ class AsgiSmokeTests(unittest.TestCase):
         )
         self.assertEqual(json.loads(body), expected)
 
-    def test_paper_pnl_responds_over_asgi_using_authoritative_instance(self):
-        account = tradingbot_router.trading_bot.account
-        prices = {symbol: Decimal("1") for symbol in account.positions}
+    def test_paper_pnl_responds_over_asgi_using_isolated_instance(self):
+        isolated_trading_bot = TradingBot()
+        self.assertIsNone(isolated_trading_bot.broker.repository)
+
+        isolated_trading_bot.place_paper_order(
+            symbol="BTC-GBP",
+            side=OrderSide.BUY,
+            quantity=Decimal("0.01"),
+            price=Decimal("50000"),
+        )
+
+        original_trading_bot = tradingbot_router.trading_bot
+        original_orders = original_trading_bot.list_paper_orders()
+
+        prices = {"BTC-GBP": Decimal("60000")}
         payload = json.dumps(
             {"prices": {symbol: str(price) for symbol, price in prices.items()}}
         ).encode()
 
-        status, headers, body = call_asgi(
-            "POST",
-            "/tradingbot/paper-pnl",
-            body=payload,
-            headers=[(b"content-type", b"application/json")],
-        )
+        with patch.object(tradingbot_router, "trading_bot", isolated_trading_bot):
+            status, headers, body = call_asgi(
+                "POST",
+                "/tradingbot/paper-pnl",
+                body=payload,
+                headers=[(b"content-type", b"application/json")],
+            )
 
-        expected_snapshot = tradingbot_router.trading_bot.paper_pnl_snapshot(prices)
+        expected_snapshot = isolated_trading_bot.paper_pnl_snapshot(prices)
         expected = {
             "pnl": {
                 "realized_pnl": str(expected_snapshot.realized_pnl),
@@ -175,19 +189,50 @@ class AsgiSmokeTests(unittest.TestCase):
             any(ct.startswith("application/json") for ct in content_types)
         )
         self.assertEqual(json.loads(body), expected)
+        self.assertEqual(
+            expected,
+            {
+                "pnl": {
+                    "realized_pnl": "0",
+                    "unrealized_pnl": "100.00",
+                    "total_pnl": "100.00",
+                    "average_costs": {"BTC-GBP": "50000"},
+                }
+            },
+        )
+
+        self.assertIs(tradingbot_router.trading_bot, original_trading_bot)
+        self.assertEqual(
+            tradingbot_router.trading_bot.list_paper_orders(),
+            original_orders,
+        )
 
     def test_paper_pnl_rejects_missing_price_over_asgi(self):
-        payload = json.dumps({"prices": {}}).encode()
+        isolated_trading_bot = TradingBot()
+        self.assertIsNone(isolated_trading_bot.broker.repository)
 
-        status, headers, body = call_asgi(
-            "POST",
-            "/tradingbot/paper-pnl",
-            body=payload,
-            headers=[(b"content-type", b"application/json")],
+        isolated_trading_bot.place_paper_order(
+            symbol="BTC-GBP",
+            side=OrderSide.BUY,
+            quantity=Decimal("0.01"),
+            price=Decimal("50000"),
         )
 
+        original_trading_bot = tradingbot_router.trading_bot
+        original_orders = original_trading_bot.list_paper_orders()
+
+        payload = json.dumps({"prices": {}}).encode()
+
+        with patch.object(tradingbot_router, "trading_bot", isolated_trading_bot):
+            status, headers, body = call_asgi(
+                "POST",
+                "/tradingbot/paper-pnl",
+                body=payload,
+                headers=[(b"content-type", b"application/json")],
+            )
+
         with self.assertRaises(ValueError) as raised:
-            tradingbot_router.trading_bot.paper_pnl_snapshot({})
+            isolated_trading_bot.paper_pnl_snapshot({})
         expected_detail = str(raised.exception)
 
         content_types = [
@@ -200,21 +245,41 @@ class AsgiSmokeTests(unittest.TestCase):
         self.assertTrue(
             any(ct.startswith("application/json") for ct in content_types)
         )
-        self.assertIn("Missing simulated price", expected_detail)
+        self.assertEqual(expected_detail, "Missing simulated price for BTC-GBP.")
         self.assertEqual(json.loads(body), {"detail": expected_detail})
+
+        self.assertIs(tradingbot_router.trading_bot, original_trading_bot)
+        self.assertEqual(
+            tradingbot_router.trading_bot.list_paper_orders(),
+            original_orders,
+        )
 
     def test_paper_portfolio_rejects_missing_price_over_asgi(self):
-        payload = json.dumps({"prices": {}}).encode()
+        isolated_trading_bot = TradingBot()
+        self.assertIsNone(isolated_trading_bot.broker.repository)
 
-        status, headers, body = call_asgi(
-            "POST",
-            "/tradingbot/paper-portfolio",
-            body=payload,
-            headers=[(b"content-type", b"application/json")],
+        isolated_trading_bot.place_paper_order(
+            symbol="BTC-GBP",
+            side=OrderSide.BUY,
+            quantity=Decimal("0.01"),
+            price=Decimal("50000"),
         )
 
+        original_trading_bot = tradingbot_router.trading_bot
+        original_orders = original_trading_bot.list_paper_orders()
+
+        payload = json.dumps({"prices": {}}).encode()
+
+        with patch.object(tradingbot_router, "trading_bot", isolated_trading_bot):
+            status, headers, body = call_asgi(
+                "POST",
+                "/tradingbot/paper-portfolio",
+                body=payload,
+                headers=[(b"content-type", b"application/json")],
+            )
+
         with self.assertRaises(ValueError) as raised:
-            tradingbot_router.trading_bot.paper_portfolio_snapshot({})
+            isolated_trading_bot.paper_portfolio_snapshot({})
         expected_detail = str(raised.exception)
 
         content_types = [
@@ -227,8 +292,14 @@ class AsgiSmokeTests(unittest.TestCase):
         self.assertTrue(
             any(ct.startswith("application/json") for ct in content_types)
         )
-        self.assertIn("Missing simulated price", expected_detail)
+        self.assertEqual(expected_detail, "Missing simulated price for BTC-GBP.")
         self.assertEqual(json.loads(body), {"detail": expected_detail})
+
+        self.assertIs(tradingbot_router.trading_bot, original_trading_bot)
+        self.assertEqual(
+            tradingbot_router.trading_bot.list_paper_orders(),
+            original_orders,
+        )
 
     def test_paper_order_placement_succeeds_over_asgi_using_isolated_instance(self):
         isolated_trading_bot = TradingBot()
