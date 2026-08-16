@@ -17,10 +17,12 @@ import asyncio
 import json
 import unittest
 from decimal import Decimal
+from unittest.mock import patch
 
 from app.main import app
 from app.modules import loader
 from app.modules.tradingbot import router as tradingbot_router
+from app.modules.tradingbot.trading_bot import TradingBot
 
 
 def _make_receive(body=b""):
@@ -227,6 +229,110 @@ class AsgiSmokeTests(unittest.TestCase):
         )
         self.assertIn("Missing simulated price", expected_detail)
         self.assertEqual(json.loads(body), {"detail": expected_detail})
+
+    def test_paper_order_placement_succeeds_over_asgi_using_isolated_instance(self):
+        isolated_trading_bot = TradingBot()
+        self.assertIsNone(isolated_trading_bot.broker.repository)
+
+        original_trading_bot = tradingbot_router.trading_bot
+        original_orders = original_trading_bot.list_paper_orders()
+
+        payload = json.dumps(
+            {
+                "symbol": "BTC-GBP",
+                "side": "buy",
+                "quantity": "0.01",
+                "price": "50000",
+            }
+        ).encode()
+
+        with patch.object(tradingbot_router, "trading_bot", isolated_trading_bot):
+            status, headers, body = call_asgi(
+                "POST",
+                "/tradingbot/paper-orders",
+                body=payload,
+                headers=[(b"content-type", b"application/json")],
+            )
+
+        content_types = [
+            value.decode()
+            for name, value in headers
+            if name.decode().lower() == "content-type"
+        ]
+
+        self.assertEqual(status, 200)
+        self.assertTrue(
+            any(ct.startswith("application/json") for ct in content_types)
+        )
+        self.assertEqual(
+            json.loads(body),
+            {
+                "order": {
+                    "symbol": "BTC-GBP",
+                    "side": "buy",
+                    "quantity": "0.01",
+                    "price": "50000",
+                    "status": "filled",
+                    "total": "500.00",
+                }
+            },
+        )
+
+        self.assertEqual(len(isolated_trading_bot.list_paper_orders()), 1)
+        self.assertEqual(
+            isolated_trading_bot.list_paper_orders()[0].symbol,
+            "BTC-GBP",
+        )
+
+        self.assertIs(tradingbot_router.trading_bot, original_trading_bot)
+        self.assertEqual(
+            tradingbot_router.trading_bot.list_paper_orders(),
+            original_orders,
+        )
+
+    def test_paper_order_placement_rejected_over_asgi_using_isolated_instance(self):
+        isolated_trading_bot = TradingBot()
+        self.assertIsNone(isolated_trading_bot.broker.repository)
+
+        original_trading_bot = tradingbot_router.trading_bot
+        original_orders = original_trading_bot.list_paper_orders()
+
+        payload = json.dumps(
+            {
+                "symbol": "BTC-GBP",
+                "side": "buy",
+                "quantity": "0.10",
+                "price": "50000",
+            }
+        ).encode()
+
+        with patch.object(tradingbot_router, "trading_bot", isolated_trading_bot):
+            status, headers, body = call_asgi(
+                "POST",
+                "/tradingbot/paper-orders",
+                body=payload,
+                headers=[(b"content-type", b"application/json")],
+            )
+
+        content_types = [
+            value.decode()
+            for name, value in headers
+            if name.decode().lower() == "content-type"
+        ]
+
+        self.assertEqual(status, 400)
+        self.assertTrue(
+            any(ct.startswith("application/json") for ct in content_types)
+        )
+        self.assertIn("exceeds maximum", json.loads(body)["detail"])
+
+        self.assertEqual(isolated_trading_bot.list_paper_orders(), ())
+
+        self.assertIs(tradingbot_router.trading_bot, original_trading_bot)
+        self.assertEqual(
+            tradingbot_router.trading_bot.list_paper_orders(),
+            original_orders,
+        )
 
 
 if __name__ == "__main__":
