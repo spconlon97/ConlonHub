@@ -174,6 +174,60 @@ class AsgiSmokeTests(unittest.TestCase):
         )
         self.assertEqual(json.loads(body), expected)
 
+    def test_paper_pnl_rejects_missing_price_over_asgi(self):
+        payload = json.dumps({"prices": {}}).encode()
+
+        status, headers, body = call_asgi(
+            "POST",
+            "/tradingbot/paper-pnl",
+            body=payload,
+            headers=[(b"content-type", b"application/json")],
+        )
+
+        with self.assertRaises(ValueError) as raised:
+            tradingbot_router.trading_bot.paper_pnl_snapshot({})
+        expected_detail = str(raised.exception)
+
+        content_types = [
+            value.decode()
+            for name, value in headers
+            if name.decode().lower() == "content-type"
+        ]
+
+        self.assertEqual(status, 400)
+        self.assertTrue(
+            any(ct.startswith("application/json") for ct in content_types)
+        )
+        self.assertIn("Missing simulated price", expected_detail)
+        self.assertEqual(json.loads(body), {"detail": expected_detail})
+
+    def test_paper_portfolio_rejects_missing_price_over_asgi(self):
+        payload = json.dumps({"prices": {}}).encode()
+
+        status, headers, body = call_asgi(
+            "POST",
+            "/tradingbot/paper-portfolio",
+            body=payload,
+            headers=[(b"content-type", b"application/json")],
+        )
+
+        with self.assertRaises(ValueError) as raised:
+            tradingbot_router.trading_bot.paper_portfolio_snapshot({})
+        expected_detail = str(raised.exception)
+
+        content_types = [
+            value.decode()
+            for name, value in headers
+            if name.decode().lower() == "content-type"
+        ]
+
+        self.assertEqual(status, 400)
+        self.assertTrue(
+            any(ct.startswith("application/json") for ct in content_types)
+        )
+        self.assertIn("Missing simulated price", expected_detail)
+        self.assertEqual(json.loads(body), {"detail": expected_detail})
+
 
 if __name__ == "__main__":
     unittest.main()
