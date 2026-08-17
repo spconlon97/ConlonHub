@@ -106,8 +106,46 @@ class AsgiSmokeTests(unittest.TestCase):
         )
         self.assertEqual(
             json.loads(body),
-            {"name": "AI Assistant", "version": "0.1.0", "status": "online"},
+            {
+                "name": "AI Assistant",
+                "version": "0.1.0",
+                "status": "configuration-required",
+                "provider": "unconfigured",
+                "model": None,
+            },
         )
+
+    def test_ai_response_requires_authentication_over_asgi(self):
+        status, headers, body = call_asgi(
+            "POST",
+            "/ai/respond",
+            body=json.dumps({"prompt": "hello"}).encode(),
+            headers=[(b"content-type", b"application/json")],
+        )
+
+        self.assertEqual(status, 401)
+        self.assertEqual(json.loads(body), {"detail": "Not authenticated"})
+        self.assertIn(
+            (b"www-authenticate", b"Bearer"),
+            [(name.lower(), value) for name, value in headers],
+        )
+
+    def test_ai_conversation_controls_require_authentication_over_asgi(self):
+        for method in ("GET", "DELETE"):
+            status, headers, body = call_asgi(
+                method, "/ai/conversations/conversation-1"
+            )
+
+            self.assertEqual(status, 401)
+            self.assertEqual(json.loads(body), {"detail": "Not authenticated"})
+            self.assertIn(
+                (b"www-authenticate", b"Bearer"),
+                [(name.lower(), value) for name, value in headers],
+            )
+
+        status, _headers, body = call_asgi("GET", "/ai/conversations")
+        self.assertEqual(status, 401)
+        self.assertEqual(json.loads(body), {"detail": "Not authenticated"})
 
     def test_unknown_path_returns_404_over_asgi(self):
         status, _headers, _body = call_asgi("GET", "/does-not-exist")

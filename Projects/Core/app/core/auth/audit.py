@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from app.core.database import migrate_database
+
 
 _VALID_OUTCOMES = {"success", "rejected", "error"}
 
@@ -85,22 +87,7 @@ class SqliteAuditRepository:
         return sqlite3.connect(self.database_path)
 
     def _initialize(self):
-        with closing(self._connect()) as connection:
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS audit_events (
-                    event_id TEXT PRIMARY KEY,
-                    occurred_at TEXT NOT NULL,
-                    principal_id TEXT,
-                    key_id TEXT,
-                    event_type TEXT NOT NULL,
-                    outcome TEXT NOT NULL,
-                    method TEXT NOT NULL,
-                    path TEXT NOT NULL
-                )
-                """
-            )
-            connection.commit()
+        migrate_database(self.database_path, "audit")
 
     def record_event(
         self,

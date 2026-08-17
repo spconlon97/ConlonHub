@@ -423,7 +423,7 @@ class AuthAsgiTests(unittest.TestCase):
             _eid, _oa, principal_id, key_id, event_type, outcome, method, path = rows[0]
             self.assertEqual(principal_id, principal.principal_id)
             self.assertEqual(key_id, token.split(".", 1)[0])
-            self.assertEqual(event_type, "auth.whoami")
+            self.assertEqual(event_type, "auth.authenticate")
             self.assertEqual(outcome, "success")
             self.assertEqual(method, "GET")
             self.assertEqual(path, "/auth/whoami")

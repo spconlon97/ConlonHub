@@ -3,6 +3,7 @@ from contextlib import closing
 from decimal import Decimal
 from pathlib import Path
 
+from app.core.database import migrate_database
 from app.modules.tradingbot.models import (
     OrderSide,
     OrderStatus,
@@ -20,20 +21,7 @@ class SqlitePaperOrderRepository:
         return sqlite3.connect(self.database_path)
 
     def _initialize(self):
-        with closing(self._connect()) as connection:
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS paper_orders (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    symbol TEXT NOT NULL,
-                    side TEXT NOT NULL,
-                    quantity TEXT NOT NULL,
-                    price TEXT NOT NULL,
-                    status TEXT NOT NULL
-                )
-                """
-            )
-            connection.commit()
+        migrate_database(self.database_path, "paper_orders")
 
     def add(self, order: PaperOrder):
         with closing(self._connect()) as connection:

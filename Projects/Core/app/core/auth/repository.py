@@ -6,6 +6,7 @@ from pathlib import Path
 
 from app.core.auth.credentials import ApiKeyVerifier, is_valid_key_id
 from app.core.auth.principal import Principal
+from app.core.database import migrate_database
 
 
 @dataclass(frozen=True)
@@ -31,30 +32,7 @@ class SqliteAuthRepository:
         return connection
 
     def _initialize(self):
-        with closing(self._connect()) as connection:
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS principals (
-                    principal_id TEXT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    created_at TEXT NOT NULL
-                )
-                """
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS api_keys (
-                    key_id TEXT PRIMARY KEY,
-                    principal_id TEXT NOT NULL,
-                    scheme TEXT NOT NULL,
-                    salt BLOB NOT NULL,
-                    digest BLOB NOT NULL,
-                    created_at TEXT NOT NULL,
-                    FOREIGN KEY (principal_id) REFERENCES principals(principal_id)
-                )
-                """
-            )
-            connection.commit()
+        migrate_database(self.database_path, "auth")
 
     def create_principal(self, principal: Principal) -> None:
         with closing(self._connect()) as connection:
@@ -70,6 +48,46 @@ class SqliteAuthRepository:
             except sqlite3.IntegrityError as error:
                 raise ValueError(
                     f"principal_id {principal.principal_id!r} already exists."
+                ) from error
+
+    def create_principal_with_api_key(
+        self,
+        principal: Principal,
+        key_id: str,
+        verifier: ApiKeyVerifier,
+    ) -> None:
+        if not is_valid_key_id(key_id):
+            raise ValueError("key_id must be a non-empty URL-safe string.")
+
+        created_at = _utc_now_iso()
+        with closing(self._connect()) as connection:
+            try:
+                with connection:
+                    connection.execute(
+                        """
+                        INSERT INTO principals (principal_id, name, created_at)
+                        VALUES (?, ?, ?)
+                        """,
+                        (principal.principal_id, principal.name, created_at),
+                    )
+                    connection.execute(
+                        """
+                        INSERT INTO api_keys (
+                            key_id, principal_id, scheme, salt, digest, created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            key_id,
+                            principal.principal_id,
+                            verifier.scheme,
+                            verifier.salt,
+                            verifier.digest,
+                            created_at,
+                        ),
+                    )
+            except sqlite3.IntegrityError as error:
+                raise ValueError(
+                    "principal_id or key_id already exists."
                 ) from error
 
     def get_principal(self, principal_id: str) -> Principal | None:
@@ -147,3 +165,33 @@ class SqliteAuthRepository:
             principal_id=principal_id,
             verifier=verifier,
         )
+
+    def list_api_keys(self):
+        with closing(self._connect()) as connection:
+            rows = connection.execute(
+                """
+                SELECT key_id, principal_id, created_at
+                FROM api_keys
+                ORDER BY created_at, key_id
+                """
+            ).fetchall()
+        return tuple(
+            {
+                "key_id": key_id,
+                "principal_id": principal_id,
+                "created_at": created_at,
+            }
+            for key_id, principal_id, created_at in rows
+        )
+
+    def revoke_api_key(self, key_id: str) -> bool:
+        if not is_valid_key_id(key_id):
+            raise ValueError("key_id must be a non-empty URL-safe string.")
+
+        with closing(self._connect()) as connection:
+            cursor = connection.execute(
+                "DELETE FROM api_keys WHERE key_id = ?",
+                (key_id,),
+            )
+            connection.commit()
+            return cursor.rowcount == 1

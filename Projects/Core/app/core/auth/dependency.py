@@ -65,7 +65,7 @@ def _record_event_safely(
         audit.record_event(
             principal_id=principal_id,
             key_id=key_id,
-            event_type="auth.whoami",
+            event_type="auth.authenticate",
             outcome=outcome,
             method=request.method,
             path=request.url.path,

@@ -361,6 +361,21 @@ class SqliteAuthRepositoryTests(unittest.TestCase):
 
             self.assertEqual(count, 0)
 
+    def test_principal_and_key_creation_is_atomic(self):
+        with TemporaryDirectory() as temp_dir:
+            repository = SqliteAuthRepository(self._database_path(temp_dir))
+            verifier = hash_api_key("some-secret", salt=b"\x11" * 16)
+            repository.create_principal_with_api_key(
+                Principal("p-1", "First"), "duplicate-key", verifier
+            )
+
+            with self.assertRaises(ValueError):
+                repository.create_principal_with_api_key(
+                    Principal("p-2", "Second"), "duplicate-key", verifier
+                )
+
+            self.assertIsNone(repository.get_principal("p-2"))
+
 
 if __name__ == "__main__":
     unittest.main()
