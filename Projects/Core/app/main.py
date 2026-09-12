@@ -5,6 +5,7 @@ from app.core.config import settings
 from app.modules.loader import get_loaded_modules
 from app.modules.tradingbot.router import router as tradingbot_router
 from app.modules.ai.router import router as ai_router
+from app.modules.ai.phone import router as phone_router
 from app.core.auth.router import router as auth_router
 
 
@@ -16,6 +17,7 @@ app = FastAPI(
 
 app.include_router(tradingbot_router)
 app.include_router(ai_router)
+app.include_router(phone_router)
 app.include_router(auth_router)
 
 

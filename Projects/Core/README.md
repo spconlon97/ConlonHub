@@ -6,7 +6,7 @@ Conlon Hub Core is a modular FastAPI application containing the Core service, AI
 
 - Core health and module-status endpoints
 - AI Assistant module status
-- Authenticated AI response endpoint with optional OpenAI Responses API provider
+- Authenticated AI response endpoint with local Ollama and optional OpenAI providers
 - Paper-only TradingBot
 - Validated SQLite-backed paper orders
 - Local paper-order API
@@ -42,7 +42,29 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-## Run
+## Run with local Ollama
+
+Install Ollama, download the local model, and start MARVIS:
+
+```powershell
+ollama pull qwen3.5:9b
+.\scripts\start_marvis.ps1 -Reload
+```
+
+The launcher uses `qwen3.5:9b` through Ollama at
+`http://127.0.0.1:11434/api/chat`. No cloud account or AI API key is required.
+The local provider gives the model MARVIS's identity and preserves the
+paper-trading-only boundary in every conversation.
+Choose another installed local model with:
+
+```powershell
+.\scripts\start_marvis.ps1 -Model "your-model-name"
+```
+
+Set `AI_PROVIDER=ollama`, `OLLAMA_MODEL`, and optionally `OLLAMA_ENDPOINT` when
+starting the server without the launcher.
+
+## Run with OpenAI
 
 ```powershell
 python -m uvicorn app.main:app --reload
@@ -53,14 +75,22 @@ On Windows, after storing the OpenAI key with
 plaintext environment variable or repository file:
 
 ```powershell
-.\scripts\start_marvis.ps1 -Reload
+.\scripts\start_marvis.ps1 -Provider openai -Reload
 ```
 
 The launcher decrypts `%LOCALAPPDATA%\ConlonHub\openai_api_key.dpapi` only into
 the MARVIS process environment and removes it when the server exits.
 
 With MARVIS running, open a second PowerShell window in `Projects\Core` and
-start a private authenticated conversation:
+create its encrypted local access credential once:
+
+```powershell
+.\scripts\setup_marvis_access.ps1
+```
+
+The helper creates the local principal and encrypts the one-time bearer
+credential with Windows DPAPI without displaying the credential. Then start a
+private authenticated conversation:
 
 ```powershell
 .\scripts\chat_marvis.ps1
@@ -68,6 +98,23 @@ start a private authenticated conversation:
 
 Type `exit` to finish. The helper decrypts the local MARVIS bearer credential
 in memory and automatically keeps the conversation ID for follow-up messages.
+
+## Private phone access
+
+MARVIS includes a mobile web chat at `/phone`. For access away from home, keep
+the application bound to `127.0.0.1` and publish it only inside a private
+Tailscale network with Tailscale Serve:
+
+```powershell
+tailscale serve --bg 8000
+```
+
+Install Tailscale on the phone and sign in to the same private network, then
+open the HTTPS address printed by Tailscale and add `/phone`. Tailscale Serve
+adds the signed-in user's identity headers to proxied requests. The phone
+routes reject requests without those headers and reject connections that do
+not arrive from the local proxy. Do not use Tailscale Funnel for MARVIS because
+Funnel makes a service public.
 
 ## Create the first API credential
 
@@ -127,8 +174,8 @@ $env:AI_REQUESTS_PER_MINUTE = "10"
 
 Exceeded requests return HTTP `429` with `Retry-After: 60`.
 
-Without `OPENAI_API_KEY`, `/ai/status` reports `configuration-required` and
-authenticated calls to `POST /ai/respond` return HTTP `503`.
+Without a configured provider, `/ai/status` reports `configuration-required`
+and authenticated calls to `POST /ai/respond` return HTTP `503`.
 The status response includes the selected provider and model, but never returns
 the API key.
 

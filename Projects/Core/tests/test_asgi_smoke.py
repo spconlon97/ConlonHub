@@ -108,7 +108,7 @@ class AsgiSmokeTests(unittest.TestCase):
             json.loads(body),
             {
                 "name": "AI Assistant",
-                "version": "0.1.0",
+                "version": "0.2.0",
                 "status": "configuration-required",
                 "provider": "unconfigured",
                 "model": None,

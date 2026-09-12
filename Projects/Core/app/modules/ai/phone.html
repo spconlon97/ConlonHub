@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#07111f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>MARVIS</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #07111f;
+      color: #edf6ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100dvh;
+      background:
+        radial-gradient(circle at 85% 0%, rgba(26, 199, 255, .18), transparent 34rem),
+        linear-gradient(180deg, #07111f 0%, #0a1728 100%);
+    }
+    .shell {
+      width: min(100%, 52rem);
+      min-height: 100dvh;
+      margin: 0 auto;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+    }
+    header {
+      padding: max(1rem, env(safe-area-inset-top)) 1rem .9rem;
+      border-bottom: 1px solid rgba(151, 202, 232, .16);
+      backdrop-filter: blur(16px);
+      background: rgba(7, 17, 31, .82);
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    .header-row { display: flex; align-items: center; gap: .75rem; }
+    .mark {
+      width: 2.35rem;
+      height: 2.35rem;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(74, 211, 255, .55);
+      border-radius: .8rem;
+      color: #6be0ff;
+      font-weight: 800;
+      box-shadow: 0 0 1.5rem rgba(24, 196, 255, .14);
+    }
+    h1 { margin: 0; font-size: 1.05rem; letter-spacing: .16em; }
+    .status { margin-left: auto; display: flex; align-items: center; gap: .4rem; color: #9fb5c8; font-size: .78rem; }
+    .dot { width: .5rem; height: .5rem; border-radius: 50%; background: #f0b84b; }
+    .status.online .dot { background: #45e5a1; box-shadow: 0 0 .8rem rgba(69, 229, 161, .65); }
+    .status.online { color: #bff8de; }
+    main {
+      overflow-y: auto;
+      padding: 1.2rem 1rem 2rem;
+      display: flex;
+      flex-direction: column;
+      gap: .85rem;
+    }
+    .welcome { margin: auto; max-width: 25rem; text-align: center; color: #a9bfd1; line-height: 1.6; }
+    .welcome strong { display: block; color: #edf6ff; font-size: 1.35rem; margin-bottom: .35rem; }
+    .message {
+      max-width: 86%;
+      padding: .85rem 1rem;
+      border-radius: 1.05rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .user { align-self: flex-end; background: #1479a5; color: #fff; border-bottom-right-radius: .3rem; }
+    .assistant { align-self: flex-start; background: rgba(21, 39, 59, .92); border: 1px solid rgba(137, 195, 226, .18); border-bottom-left-radius: .3rem; }
+    .error { align-self: center; color: #ffc4c4; background: rgba(127, 35, 48, .38); border: 1px solid rgba(255, 123, 138, .3); }
+    .thinking { color: #9fb5c8; font-style: italic; }
+    footer {
+      padding: .7rem 1rem max(.8rem, env(safe-area-inset-bottom));
+      border-top: 1px solid rgba(151, 202, 232, .16);
+      background: rgba(7, 17, 31, .92);
+    }
+    form { display: flex; align-items: flex-end; gap: .6rem; }
+    textarea {
+      flex: 1;
+      resize: none;
+      min-height: 3rem;
+      max-height: 9rem;
+      padding: .78rem .9rem;
+      border-radius: 1rem;
+      border: 1px solid rgba(142, 195, 225, .28);
+      background: #0e2034;
+      color: #edf6ff;
+      font: inherit;
+      outline: none;
+    }
+    textarea:focus { border-color: #48ccef; box-shadow: 0 0 0 3px rgba(72, 204, 239, .12); }
+    button {
+      min-width: 3rem;
+      height: 3rem;
+      border: 0;
+      border-radius: 1rem;
+      background: #48ccef;
+      color: #062033;
+      font-size: 1.25rem;
+      font-weight: 800;
+    }
+    button:disabled { opacity: .45; }
+    .subrow { display: flex; justify-content: space-between; align-items: center; margin-top: .5rem; color: #8199ad; font-size: .72rem; }
+    .new-chat { min-width: 0; height: auto; padding: 0; border-radius: 0; background: none; color: #87dff8; font-size: .72rem; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div class="header-row">
+        <div class="mark">M</div>
+        <h1>MARVIS</h1>
+        <div id="status" class="status"><span class="dot"></span><span>Connecting</span></div>
+      </div>
+    </header>
+    <main id="messages" aria-live="polite">
+      <div id="welcome" class="welcome">
+        <strong>Your private local assistant</strong>
+        MARVIS runs on your home PC. Messages travel through your private Tailscale network.
+      </div>
+    </main>
+    <footer>
+      <form id="chat-form">
+        <textarea id="prompt" rows="1" maxlength="16000" placeholder="Message MARVIS" aria-label="Message MARVIS" required></textarea>
+        <button id="send" type="submit" aria-label="Send">↑</button>
+      </form>
+      <div class="subrow"><span id="model">Private connection</span><button id="new-chat" class="new-chat" type="button">New chat</button></div>
+    </footer>
+  </div>
+  <script>
+    const messages = document.querySelector('#messages');
+    const prompt = document.querySelector('#prompt');
+    const send = document.querySelector('#send');
+    const statusNode = document.querySelector('#status');
+    const modelNode = document.querySelector('#model');
+    let conversationId = sessionStorage.getItem('marvisConversationId');
+
+    function addMessage(role, text) {
+      document.querySelector('#welcome')?.remove();
+      const node = document.createElement('div');
+      node.className = `message ${role}`;
+      node.textContent = text;
+      messages.appendChild(node);
+      messages.scrollTop = messages.scrollHeight;
+      return node;
+    }
+
+    async function loadStatus() {
+      try {
+        const response = await fetch('/phone/api/status', { headers: { Accept: 'application/json' } });
+        if (!response.ok) throw new Error('Private connection unavailable');
+        const data = await response.json();
+        statusNode.classList.toggle('online', data.status === 'online');
+        statusNode.lastElementChild.textContent = data.status === 'online' ? 'Online' : data.status;
+        modelNode.textContent = data.model || 'Local model';
+      } catch (error) {
+        statusNode.lastElementChild.textContent = 'Offline';
+      }
+    }
+
+    document.querySelector('#chat-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const text = prompt.value.trim();
+      if (!text || send.disabled) return;
+
+      addMessage('user', text);
+      prompt.value = '';
+      prompt.style.height = '';
+      send.disabled = true;
+      const waiting = addMessage('assistant thinking', 'MARVIS is thinking…');
+
+      try {
+        const body = { prompt: text };
+        if (conversationId) body.conversation_id = conversationId;
+        const response = await fetch('/phone/api/respond', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'MARVIS could not answer.');
+        conversationId = data.conversation_id;
+        sessionStorage.setItem('marvisConversationId', conversationId);
+        waiting.className = 'message assistant';
+        waiting.textContent = data.response;
+      } catch (error) {
+        waiting.className = 'message error';
+        waiting.textContent = error.message;
+      } finally {
+        send.disabled = false;
+        prompt.focus();
+        messages.scrollTop = messages.scrollHeight;
+      }
+    });
+
+    prompt.addEventListener('input', () => {
+      prompt.style.height = '';
+      prompt.style.height = `${Math.min(prompt.scrollHeight, 144)}px`;
+    });
+
+    document.querySelector('#new-chat').addEventListener('click', () => {
+      conversationId = null;
+      sessionStorage.removeItem('marvisConversationId');
+      messages.replaceChildren();
+      const welcome = document.createElement('div');
+      welcome.id = 'welcome';
+      welcome.className = 'welcome';
+      welcome.innerHTML = '<strong>New private conversation</strong>What would you like help with?';
+      messages.appendChild(welcome);
+      prompt.focus();
+    });
+
+    loadStatus();
+  </script>
+</body>
+</html>

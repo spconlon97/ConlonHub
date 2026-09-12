@@ -2,6 +2,10 @@ param(
     [string]$HostAddress = "127.0.0.1",
     [ValidateRange(1, 65535)]
     [int]$Port = 8000,
+    [ValidateSet("ollama", "openai")]
+    [string]$Provider = "ollama",
+    [string]$Model,
+    [string]$OllamaEndpoint = "http://127.0.0.1:11434/api/chat",
     [switch]$Reload
 )
 
@@ -20,17 +24,37 @@ function Read-DpapiSecret {
 }
 
 $credentialPath = Join-Path $env:LOCALAPPDATA "ConlonHub\openai_api_key.dpapi"
-$pythonPath = Join-Path $PSScriptRoot "..\.venv-windows\Scripts\python.exe"
+$pythonCandidates = @(
+    (Join-Path $PSScriptRoot "..\.venv\Scripts\python.exe"),
+    (Join-Path $PSScriptRoot "..\.venv-windows\Scripts\python.exe")
+)
+$pythonPath = $pythonCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 
-if (-not (Test-Path -LiteralPath $pythonPath)) {
-    throw "MARVIS Python environment not found: $pythonPath"
+if (-not $pythonPath) {
+    throw "MARVIS Python environment not found. Create .venv from the Setup instructions."
 }
 
 try {
-    $env:OPENAI_API_KEY = Read-DpapiSecret -Path $credentialPath
+    $env:AI_PROVIDER = $Provider
 
-    if (-not $env:OPENAI_API_KEY.StartsWith("sk-")) {
-        throw "The encrypted OpenAI credential is invalid."
+    if ($Provider -eq "ollama") {
+        $env:OLLAMA_MODEL = if ([string]::IsNullOrWhiteSpace($Model)) {
+            "qwen3.5:9b"
+        } else {
+            $Model.Trim()
+        }
+        $env:OLLAMA_ENDPOINT = $OllamaEndpoint
+    }
+    else {
+        $env:OPENAI_API_KEY = Read-DpapiSecret -Path $credentialPath
+
+        if (-not $env:OPENAI_API_KEY.StartsWith("sk-")) {
+            throw "The encrypted OpenAI credential is invalid."
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($Model)) {
+            $env:OPENAI_MODEL = $Model.Trim()
+        }
     }
 
     $arguments = @(
@@ -47,5 +71,6 @@ try {
     exit $LASTEXITCODE
 }
 finally {
-    Remove-Item Env:OPENAI_API_KEY -ErrorAction SilentlyContinue
+    Remove-Item Env:AI_PROVIDER, Env:OLLAMA_MODEL, Env:OLLAMA_ENDPOINT, `
+        Env:OPENAI_API_KEY, Env:OPENAI_MODEL -ErrorAction SilentlyContinue
 }
