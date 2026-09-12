@@ -24,9 +24,13 @@ class PaperOrder:
         if not self.symbol.strip():
             raise ValueError("Symbol is required.")
 
+        if not self.quantity.is_finite():
+            raise ValueError("Quantity must be finite.")
         if self.quantity <= 0:
             raise ValueError("Quantity must be greater than zero.")
 
+        if not self.price.is_finite():
+            raise ValueError("Price must be finite.")
         if self.price <= 0:
             raise ValueError("Price must be greater than zero.")
 

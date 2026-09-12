@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.core.auth.dependency import require_principal
 from app.core.auth.principal import Principal
@@ -19,6 +19,13 @@ router = APIRouter(prefix="/ai", tags=["AI Assistant"])
 class AIResponseRequest(BaseModel):
     prompt: str = Field(min_length=1, max_length=16000)
     conversation_id: str | None = None
+
+    @field_validator("prompt")
+    @classmethod
+    def reject_blank_prompt(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("prompt must be a non-empty string.")
+        return value
 
 
 class AIResponse(BaseModel):
