@@ -18,11 +18,15 @@ class TradingConfig:
         if self.live_trading_enabled:
             raise ValueError("Live trading is disabled.")
 
+        if not self.max_order_value.is_finite():
+            raise ValueError("Maximum order value must be finite.")
         if self.max_order_value <= 0:
             raise ValueError(
                 "Maximum order value must be greater than zero."
             )
 
+        if not self.starting_cash.is_finite():
+            raise ValueError("Starting paper cash must be finite.")
         if self.starting_cash <= 0:
             raise ValueError(
                 "Starting paper cash must be greater than zero."

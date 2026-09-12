@@ -1,8 +1,10 @@
 import argparse
 import json
+import sys
 from pathlib import Path
 
 from app.core.auth.bootstrap import default_database_path
+from app.core.auth.credentials import is_valid_key_id
 from app.core.auth.repository import SqliteAuthRepository
 
 
@@ -25,7 +27,20 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv=None) -> int:
-    arguments = build_parser().parse_args(argv)
+    parser = build_parser()
+    tokens = list(sys.argv[1:] if argv is None else argv)
+    # URL-safe IDs may start with '-', which argparse treats as an option.
+    # Bind an ID to its flag without consuming actual supported CLI options.
+    options = {option for action in parser._actions for option in action.option_strings}
+    for index in range(len(tokens) - 1):
+        if (
+            tokens[index] == "--key-id"
+            and tokens[index + 1] not in options
+            and is_valid_key_id(tokens[index + 1])
+        ):
+            tokens[index:index + 2] = [f"--key-id={tokens[index + 1]}"]
+            break
+    arguments = parser.parse_args(tokens)
     repository = SqliteAuthRepository(arguments.database)
 
     if arguments.list:

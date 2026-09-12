@@ -151,6 +151,8 @@ def migrate_database(database_path, component: str) -> int:
     with closing(sqlite3.connect(path)) as connection:
         connection.execute("PRAGMA foreign_keys = ON")
         with connection:
+            # Lock before inspecting versions, and include DDL in the transaction.
+            connection.execute("BEGIN IMMEDIATE")
             _ensure_migration_table(connection)
             applied = {
                 row[0]

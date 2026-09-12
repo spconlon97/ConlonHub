@@ -14,6 +14,8 @@ class PaperAccount:
     )
 
     def __post_init__(self):
+        if not self.starting_cash.is_finite():
+            raise ValueError("Starting paper cash must be finite.")
         if self.starting_cash <= 0:
             raise ValueError("Starting paper cash must be greater than zero.")
 

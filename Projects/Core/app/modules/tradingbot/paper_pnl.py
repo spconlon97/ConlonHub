@@ -68,6 +68,8 @@ class PaperPnlCalculator:
 
             price = normalized_prices[symbol]
 
+            if not price.is_finite():
+                raise ValueError(f"Simulated price for {symbol} must be finite.")
             if price <= 0:
                 raise ValueError(
                     f"Simulated price for {symbol} must be positive."
