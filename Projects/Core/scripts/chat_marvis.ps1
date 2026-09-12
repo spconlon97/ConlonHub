@@ -5,6 +5,17 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function ConvertFrom-Utf8JsonResponse {
+    param([Parameter(Mandatory)]$Response)
+
+    if ($Response.RawContentStream) {
+        $bytes = $Response.RawContentStream.ToArray()
+        return [Text.Encoding]::UTF8.GetString($bytes) | ConvertFrom-Json
+    }
+
+    return $Response.Content | ConvertFrom-Json
+}
+
 function Read-DpapiSecret {
     param([Parameter(Mandatory)][string]$Path)
 
@@ -24,7 +35,12 @@ $conversationId = $null
 $singlePrompt = -not [string]::IsNullOrWhiteSpace($Prompt)
 
 try {
-    $status = Invoke-RestMethod -Uri "$BaseUrl/ai/status" -Method Get -TimeoutSec 10
+    $statusResponse = Invoke-WebRequest `
+        -UseBasicParsing `
+        -Uri "$BaseUrl/ai/status" `
+        -Method Get `
+        -TimeoutSec 10
+    $status = ConvertFrom-Utf8JsonResponse $statusResponse
     Write-Host "MARVIS is $($status.status) using $($status.model)." -ForegroundColor Green
 
     while ($true) {
@@ -49,13 +65,15 @@ try {
             $requestBody.conversation_id = $conversationId
         }
 
-        $response = Invoke-RestMethod `
+        $webResponse = Invoke-WebRequest `
+            -UseBasicParsing `
             -Uri "$BaseUrl/ai/respond" `
             -Method Post `
             -Headers $headers `
             -ContentType "application/json" `
             -Body ($requestBody | ConvertTo-Json) `
             -TimeoutSec 120
+        $response = ConvertFrom-Utf8JsonResponse $webResponse
 
         $conversationId = $response.conversation_id
         Write-Host "MARVIS: $($response.response)" -ForegroundColor Cyan

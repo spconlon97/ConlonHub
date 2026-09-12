@@ -8,7 +8,7 @@ from app.modules.ai.providers import (
 
 class AIAssistant(ModuleBase):
     name = "AI Assistant"
-    version = "0.1.0"
+    version = "0.2.0"
 
     def __init__(self, provider: AIProvider | None = None):
         self.provider = provider or provider_from_environment()
