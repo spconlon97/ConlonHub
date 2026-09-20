@@ -1,4 +1,5 @@
 from app.modules.base import ModuleBase
+from app.modules.ai.orchestration import generate_with_tools
 from app.modules.ai.providers import (
     AIProvider,
     UnconfiguredAIProvider,
@@ -10,8 +11,13 @@ class AIAssistant(ModuleBase):
     name = "AI Assistant"
     version = "0.2.0"
 
-    def __init__(self, provider: AIProvider | None = None):
+    def __init__(self, provider: AIProvider | None = None, registry=None):
         self.provider = provider or provider_from_environment()
+        if registry is None:
+            # Deferred import avoids the builtins -> loader -> assistant cycle.
+            from app.core.capabilities.builtin import build_capability_registry
+            registry = build_capability_registry()
+        self.registry = registry
 
     def start(self):
         return self.status()
@@ -34,7 +40,6 @@ class AIAssistant(ModuleBase):
         if not isinstance(prompt, str) or not prompt.strip():
             raise ValueError("prompt must be a non-empty string.")
 
-        response = self.provider.generate(prompt.strip(), history=history)
-        if not isinstance(response, str) or not response.strip():
-            raise ValueError("AI provider returned an empty response.")
-        return response
+        return generate_with_tools(
+            self.provider, self.registry, prompt.strip(), history=history,
+        )
