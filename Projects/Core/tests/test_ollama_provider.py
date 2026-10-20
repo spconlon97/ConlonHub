@@ -36,6 +36,11 @@ class RecordingOpener:
 
 
 class OllamaChatProviderTests(unittest.TestCase):
+    def test_system_prompt_keeps_trading_language_paper_only(self):
+        self.assertIn("paper trading", DEFAULT_MARVIS_SYSTEM_PROMPT)
+        self.assertIn("Never claim that you can place live trades", DEFAULT_MARVIS_SYSTEM_PROMPT)
+        self.assertIn("'paper orders' rather than 'trades'", DEFAULT_MARVIS_SYSTEM_PROMPT)
+
     def test_sends_chat_request_and_extracts_message_content(self):
         opener = RecordingOpener(
             {"message": {"role": "assistant", "content": "Hello from MARVIS"}}
