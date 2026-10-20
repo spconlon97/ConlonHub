@@ -1,9 +1,10 @@
 from decimal import Decimal
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from app.core.auth.dependency import require_principal
 from app.modules.tradingbot.models import OrderSide, PaperOrder
 from app.modules.tradingbot.trading_bot import TradingBot
 from app.modules.tradingbot.paper_broker import PaperBroker
@@ -13,7 +14,11 @@ from app.modules.tradingbot.sqlite_repository import (
 from app.modules.loader import register_module_instance
 
 
-router = APIRouter(prefix="/tradingbot", tags=["TradingBot"])
+router = APIRouter(
+    prefix="/tradingbot",
+    tags=["TradingBot"],
+    dependencies=[Depends(require_principal)],
+)
 database_path = (
     Path(__file__).resolve().parents[5]
     / "Databases"

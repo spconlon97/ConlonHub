@@ -16,11 +16,14 @@ startup behaviour and give a false pass.
 import asyncio
 import json
 import unittest
+from contextlib import contextmanager
 from datetime import datetime
 from decimal import Decimal
 from unittest.mock import patch
 
 from app.core import registry
+from app.core.auth.dependency import require_principal
+from app.core.auth.principal import Principal
 from app.core.config import settings
 from app.main import app
 from app.modules import loader
@@ -76,6 +79,26 @@ async def _call_asgi(method, path, body=b"", headers=None):
 
 def call_asgi(method, path, body=b"", headers=None):
     return asyncio.run(_call_asgi(method, path, body, headers))
+
+
+@contextmanager
+def _authenticated():
+    original_overrides = dict(app.dependency_overrides)
+    app.dependency_overrides[require_principal] = lambda: Principal("p", "Test")
+    try:
+        yield
+    finally:
+        app.dependency_overrides.clear()
+        app.dependency_overrides.update(original_overrides)
+
+
+def _tradingbot_routes():
+    return sorted(
+        (method.upper(), path)
+        for path, operations in app.openapi()["paths"].items()
+        if path.startswith("/tradingbot")
+        for method in operations
+    )
 
 
 class AsgiSmokeTests(unittest.TestCase):
@@ -147,13 +170,68 @@ class AsgiSmokeTests(unittest.TestCase):
         self.assertEqual(status, 401)
         self.assertEqual(json.loads(body), {"detail": "Not authenticated"})
 
+    def test_every_tradingbot_route_requires_authentication_over_asgi(self):
+        routes = _tradingbot_routes()
+        self.assertEqual(
+            routes,
+            [
+                ("GET", "/tradingbot/paper-account"),
+                ("GET", "/tradingbot/paper-orders"),
+                ("POST", "/tradingbot/paper-orders"),
+                ("POST", "/tradingbot/paper-pnl"),
+                ("POST", "/tradingbot/paper-portfolio"),
+            ],
+        )
+
+        for method, path in routes:
+            with self.subTest(method=method, path=path):
+                status, headers, body = call_asgi(
+                    method,
+                    path,
+                    body=b"{}",
+                    headers=[(b"content-type", b"application/json")],
+                )
+
+                self.assertEqual(status, 401)
+                self.assertEqual(json.loads(body), {"detail": "Not authenticated"})
+                self.assertIn(
+                    (b"www-authenticate", b"Bearer"),
+                    [(name.lower(), value) for name, value in headers],
+                )
+
+    def test_unauthenticated_paper_order_is_not_placed_over_asgi(self):
+        isolated_trading_bot = TradingBot()
+        self.assertIsNone(isolated_trading_bot.broker.repository)
+
+        payload = json.dumps(
+            {
+                "symbol": "BTC-GBP",
+                "side": "buy",
+                "quantity": "0.01",
+                "price": "50000",
+            }
+        ).encode()
+
+        with patch.object(tradingbot_router, "trading_bot", isolated_trading_bot):
+            status, _headers, body = call_asgi(
+                "POST",
+                "/tradingbot/paper-orders",
+                body=payload,
+                headers=[(b"content-type", b"application/json")],
+            )
+
+        self.assertEqual(status, 401)
+        self.assertEqual(json.loads(body), {"detail": "Not authenticated"})
+        self.assertEqual(isolated_trading_bot.list_paper_orders(), ())
+
     def test_unknown_path_returns_404_over_asgi(self):
         status, _headers, _body = call_asgi("GET", "/does-not-exist")
 
         self.assertEqual(status, 404)
 
     def test_paper_account_responds_over_asgi_using_authoritative_instance(self):
-        status, headers, body = call_asgi("GET", "/tradingbot/paper-account")
+        with _authenticated():
+            status, headers, body = call_asgi("GET", "/tradingbot/paper-account")
 
         account = tradingbot_router.trading_bot.account
         expected = {
@@ -196,7 +274,9 @@ class AsgiSmokeTests(unittest.TestCase):
             {"prices": {symbol: str(price) for symbol, price in prices.items()}}
         ).encode()
 
-        with patch.object(tradingbot_router, "trading_bot", isolated_trading_bot):
+        with _authenticated(), patch.object(
+            tradingbot_router, "trading_bot", isolated_trading_bot
+        ):
             status, headers, body = call_asgi(
                 "POST",
                 "/tradingbot/paper-pnl",
@@ -264,7 +344,9 @@ class AsgiSmokeTests(unittest.TestCase):
 
         payload = json.dumps({"prices": {}}).encode()
 
-        with patch.object(tradingbot_router, "trading_bot", isolated_trading_bot):
+        with _authenticated(), patch.object(
+            tradingbot_router, "trading_bot", isolated_trading_bot
+        ):
             status, headers, body = call_asgi(
                 "POST",
                 "/tradingbot/paper-pnl",
@@ -311,7 +393,9 @@ class AsgiSmokeTests(unittest.TestCase):
 
         payload = json.dumps({"prices": {}}).encode()
 
-        with patch.object(tradingbot_router, "trading_bot", isolated_trading_bot):
+        with _authenticated(), patch.object(
+            tradingbot_router, "trading_bot", isolated_trading_bot
+        ):
             status, headers, body = call_asgi(
                 "POST",
                 "/tradingbot/paper-portfolio",
@@ -358,7 +442,9 @@ class AsgiSmokeTests(unittest.TestCase):
             }
         ).encode()
 
-        with patch.object(tradingbot_router, "trading_bot", isolated_trading_bot):
+        with _authenticated(), patch.object(
+            tradingbot_router, "trading_bot", isolated_trading_bot
+        ):
             status, headers, body = call_asgi(
                 "POST",
                 "/tradingbot/paper-orders",
@@ -418,7 +504,9 @@ class AsgiSmokeTests(unittest.TestCase):
             }
         ).encode()
 
-        with patch.object(tradingbot_router, "trading_bot", isolated_trading_bot):
+        with _authenticated(), patch.object(
+            tradingbot_router, "trading_bot", isolated_trading_bot
+        ):
             status, headers, body = call_asgi(
                 "POST",
                 "/tradingbot/paper-orders",

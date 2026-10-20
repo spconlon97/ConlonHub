@@ -71,10 +71,10 @@ All database paths are relative to the repository root (`Databases/`), not
   - No network imports in the module; prices are caller-supplied only. [code]
   - Rejected orders are not stored. [README][test]
 - **Data owned:** `Databases/paper_orders.db`. [code]
-- **Known gap:** the `/tradingbot/*` routes do not require authentication. [code]
-  The app binds to `127.0.0.1`, but `tailscale serve --bg 8000` (see README)
-  would expose them to every device on the tailnet. Orders remain simulated, but
-  this is unauthenticated write access. Not yet addressed.
+- **Authentication:** every `/tradingbot/*` route requires the Core bearer
+  credential via a router-level `Depends(require_principal)`; routes added to
+  this router inherit it. [code][test] There is still a single shared paper
+  account, not one per principal.
 
 ## Scripts (`scripts/`)
 
