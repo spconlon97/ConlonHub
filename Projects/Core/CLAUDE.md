@@ -4,12 +4,17 @@ Operating rules for Claude Code sessions working in this project.
 
 ## Project scope
 
-- This file applies to `D:\ConlonHub\Projects\Core`.
-- The Git repository root is `D:\ConlonHub` (Core is a subdirectory of that monorepo,
-  not its own repo).
-- `D:\ConlonHub\Projects\TradingBot` is a separate sibling project. Do not inspect,
+- This file applies to `Projects\Core` in the Conlon Hub repository
+  (current checkout: `C:\Users\seanpaul\Documents\ConlonHub`).
+- The Git repository root is the `ConlonHub` folder (Core is a subdirectory of that
+  monorepo, not its own repo). Older copies exist elsewhere on disk
+  (`C:\ConlonHub`, `Documents\Conlon-Restore-Review\…`, dated backups); do not
+  edit them unless explicitly asked.
+- A separate sibling project, `Projects\TradingBot`, has been referenced but is not
+  present in this checkout (verified 2026-10-20). If it appears, do not inspect,
   modify, stage, commit, move, or delete anything in it unless explicitly requested.
   It is unrelated to the `app/modules/tradingbot` module inside Core.
+- Module reference: `docs/modules.md`.
 
 ## Context and token efficiency
 
