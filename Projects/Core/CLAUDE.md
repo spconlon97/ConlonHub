@@ -58,9 +58,10 @@ Operating rules for Claude Code sessions working in this project.
 - Do not change secrets, credentials, `.env`, authentication configuration, or MCP
   credentials unless explicitly requested.
 - Do not expose credentials or tokens in output.
-- Preserve the existing paper-trading-only safety restrictions of the TradingBot
-  module (no live trading, no exchange connections/credentials, order value limits,
-  cash/position limits, caller-supplied prices only).
+- TradingBot module is paper-trading only; full rules in
+  `.claude/rules/tradingbot.md` (loaded when working in that module).
+- Destructive Git commands and `.env` access are also blocked by deny rules in
+  `.claude/settings.json`.
 
 ## Development workflow
 
@@ -79,6 +80,7 @@ Operating rules for Claude Code sessions working in this project.
 - Do not claim something works unless it has actually been checked.
 - Report tests/tools actually run and their results.
 - Report warnings, skipped tests, and limitations explicitly.
+- Use the `/verify` skill (`.claude/skills/verify/`) to run and report tests.
 
 ## Tool preference
 
