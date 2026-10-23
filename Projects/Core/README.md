@@ -219,6 +219,10 @@ http://127.0.0.1:8000/docs
 http://127.0.0.1:8000/tradingbot/paper-account
 ```
 
+The `/tradingbot/*` and `/ai/conversations` routes require the Core bearer
+credential and return HTTP `401` when opened directly in a browser. Use the
+**Authorize** button on `/docs` to call them interactively.
+
 ## Tests
 
 ```powershell
@@ -229,6 +233,10 @@ The suite covers TradingBot safety behaviour, the Core module registry and loade
 The local paper-order database is created at `Databases/paper_orders.db` from the repository root. It is generated automatically, survives application restarts, and is excluded from Git.
 
 ## Paper-order API
+
+Every `/tradingbot` endpoint requires the Core bearer credential
+(`Authorization: Bearer <token>`); unauthenticated requests return HTTP `401`
+and never reach the paper broker.
 
 Create a simulated order:
 

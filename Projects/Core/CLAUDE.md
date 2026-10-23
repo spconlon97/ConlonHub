@@ -4,18 +4,29 @@ Operating rules for Claude Code sessions working in this project.
 
 ## Project scope
 
-- This file applies to `D:\ConlonHub\Projects\Core`.
-- The Git repository root is `D:\ConlonHub` (Core is a subdirectory of that monorepo,
-  not its own repo).
-- `D:\ConlonHub\Projects\TradingBot` is a separate sibling project. Do not inspect,
+- This file applies to `Projects\Core` in the Conlon Hub repository
+  (current checkout: `C:\Users\seanpaul\Documents\ConlonHub`).
+- The Git repository root is the `ConlonHub` folder (Core is a subdirectory of that
+  monorepo, not its own repo). Older copies exist elsewhere on disk
+  (`C:\ConlonHub`, `Documents\Conlon-Restore-Review\…`, dated backups); do not
+  edit them unless explicitly asked.
+- A separate sibling project, `Projects\TradingBot`, has been referenced but is not
+  present in this checkout (verified 2026-10-20). If it appears, do not inspect,
   modify, stage, commit, move, or delete anything in it unless explicitly requested.
   It is unrelated to the `app/modules/tradingbot` module inside Core.
+- Module reference: `docs/modules.md`. External tool decisions:
+  `docs/TECHNOLOGY_REGISTER.md` (a verdict there is not approval to install).
 
 ## Context and token efficiency
 
-- Use Serena memories first when starting work in this project.
-- Use Serena symbolic tools (symbol overview, find symbol, find references) before
-  reading whole files.
+- Configured tooling (verified 2026-10-20): `codebase-memory-mcp` only. Serena,
+  Context7 and Playwright MCP servers are **not** configured; the guidance below
+  applies when they are available, otherwise use the stated fallback. Do not
+  install them without the user's approval.
+- Read the Serena memory files (`.serena/memories/*.md`) first when starting work
+  in this project; they are plain Markdown and need no Serena server.
+- Use symbolic code navigation (Serena or `codebase-memory-mcp`) before reading
+  whole files.
 - Avoid recursively reading the whole repository.
 - Read only the files or code regions required for the current task.
 - Reuse existing project knowledge (Serena memories) instead of rediscovering the
@@ -47,9 +58,10 @@ Operating rules for Claude Code sessions working in this project.
 - Do not change secrets, credentials, `.env`, authentication configuration, or MCP
   credentials unless explicitly requested.
 - Do not expose credentials or tokens in output.
-- Preserve the existing paper-trading-only safety restrictions of the TradingBot
-  module (no live trading, no exchange connections/credentials, order value limits,
-  cash/position limits, caller-supplied prices only).
+- TradingBot module is paper-trading only; full rules in
+  `.claude/rules/tradingbot.md` (loaded when working in that module).
+- Destructive Git commands and `.env` access are also blocked by deny rules in
+  `.claude/settings.json`.
 
 ## Development workflow
 
@@ -68,12 +80,16 @@ Operating rules for Claude Code sessions working in this project.
 - Do not claim something works unless it has actually been checked.
 - Report tests/tools actually run and their results.
 - Report warnings, skipped tests, and limitations explicitly.
+- Use the `/verify` skill (`.claude/skills/verify/`) to run and report tests.
 
 ## Tool preference
 
-1. Serena — for understanding/navigating project code.
-2. Normal targeted file reads — when Serena is insufficient.
-3. Context7 — for current library/framework docs.
-4. Playwright — for browser/UI verification.
+1. Serena memories, then Serena or `codebase-memory-mcp` — for understanding and
+   navigating project code.
+2. Normal targeted file reads — when those are insufficient.
+3. Context7 when configured, otherwise official docs via web fetch — for current
+   library/framework docs.
+4. Playwright when configured, otherwise the built-in browser — for browser/UI
+   verification.
 5. Shell commands — only when needed for inspection, tests, or explicitly requested
    work.

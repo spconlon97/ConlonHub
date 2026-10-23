@@ -398,7 +398,7 @@ class AuthAsgiTests(unittest.TestCase):
     # --- existing behaviour untouched ------------------------------------
 
     def test_existing_routes_remain_unauthenticated_and_unchanged(self):
-        for path in ("/", "/modules", "/tradingbot/paper-account", "/ai/status"):
+        for path in ("/", "/modules", "/ai/status"):
             status_code, _headers, _body = call_asgi("GET", path)
             self.assertEqual(status_code, 200, msg=f"{path} should remain open")
 

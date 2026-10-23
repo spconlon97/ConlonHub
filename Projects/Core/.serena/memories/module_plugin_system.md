@@ -5,41 +5,38 @@
 Each module also carries class attributes `name` (default `"Unnamed Module"`) and
 `version` (default `"0.1.0"`), overridden per module.
 
-`app/modules/loader.py` hard-codes the list of active module instances (not
-auto-discovered):
+`app/modules/loader.py` hard-codes the module classes (not auto-discovered):
 ```python
-modules = [AIAssistant(), TradingBot()]
+def _module_classes():
+    return [AIAssistant, TradingBot]
 ```
-It populates a module-level `loaded_modules` dict lazily the first time
-`get_loaded_modules()` is called, keyed by `module.name`, each entry containing
-`name`, `version`, `status()`.
+Instances load lazily on first use (`get_loaded_modules()` / `get_module_instance()`),
+keyed by `module.name`. A router can supply its own configured instance via
+`register_module_instance()` — TradingBot's router does this so the API and the
+loader share one authoritative instance.
 
-Separately, `app/core/registry.py` holds a **static**, hand-maintained dict
-(`get_modules()`) describing modules for the `/modules` endpoint — this is metadata
-only and is NOT wired to the loader/ModuleBase system. It currently lists:
-- `core` — "Core", status `online`, v0.1.0
-- `ai` — "AI Assistant", status `planned`, v0.1.0
-- `trading` — "Trading Bot", status `planned`, v0.1.0
-- `home` — "Home Automation", status `planned`, v0.1.0
-
-Note the `/modules` registry says AI/Trading/Home are "planned" while
-`/loaded-modules` actually instantiates real `AIAssistant`/`TradingBot` classes —
-these two views can disagree and aren't kept in sync automatically.
+`app/core/registry.py` holds a static dict for `/modules` (`core`, `ai`, `trading`,
+`home`, defaulting to `planned`). `get_modules()` reconciles it with the loader: any
+entry whose module is loaded reports the live status and version. `home` has no
+module and stays `planned`.
 
 **Current real modules under `app/modules/`:**
-- `ai/assistant.py` — `AIAssistant`, minimal/placeholder implementation of
-  `ModuleBase`
-- `tradingbot/` — the fully built-out module:
-  - `router.py` — FastAPI `APIRouter` (`tradingbot_router`), endpoints:
-    `POST /tradingbot/paper-orders`, `GET /tradingbot/paper-orders`,
-    `GET /tradingbot/paper-account`, `POST /tradingbot/paper-portfolio`; request
-    models `PaperOrderRequest`, `PaperPortfolioRequest`
-  - `trading_bot.py` — `TradingBot(ModuleBase)` module class itself
-  - `config.py` — TradingBot-specific settings (e.g. paper order value limit)
-  - `models.py` — data models (e.g. order representation)
-  - `paper_broker.py` — paper-trading order execution logic (buy/sell validation)
-  - `paper_account.py` — simulated cash balance & positions
-  - `paper_portfolio.py` — caller-priced portfolio valuation
-  - `paper_pnl.py` — simulated paper profit & loss calculation
-  - `sqlite_repository.py` — hand-rolled SQLite persistence for paper orders
-    (DB file at `Databases/paper_orders.db`, gitignored)
+- `ai/` — MARVIS AI Assistant: `assistant.py` (module class), `providers.py`
+  (Ollama / OpenAI), `orchestration.py` (bounded read-only tool use over the
+  capability registry), `repository.py` (SQLite conversations, `core_ai.db`),
+  `router.py` (`/ai/*`), `phone.py` (`/phone`, Tailscale Serve identity required)
+- `tradingbot/` — paper-only trading:
+  - `router.py` — `APIRouter` with router-level `Depends(require_principal)`;
+    `POST`/`GET /tradingbot/paper-orders`, `GET /tradingbot/paper-account`,
+    `POST /tradingbot/paper-portfolio`, `POST /tradingbot/paper-pnl`
+  - `trading_bot.py` — `TradingBot(ModuleBase)`
+  - `config.py` — `live_trading_enabled=False` (True raises), order value limit,
+    starting cash
+  - `models.py`, `paper_broker.py`, `paper_account.py`, `paper_portfolio.py`,
+    `paper_pnl.py`
+  - `sqlite_repository.py` — SQLite persistence (`Databases/paper_orders.db` at the
+    repository root, gitignored)
+
+**Capabilities** (`app/core/capabilities/`) expose module data to MARVIS as READ-only
+capabilities and call module instances in-process, not over HTTP. Full reference:
+`docs/modules.md`.

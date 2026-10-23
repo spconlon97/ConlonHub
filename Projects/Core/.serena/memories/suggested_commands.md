@@ -8,36 +8,33 @@ python -m venv .venv
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
-(Note: an alternate `.venv-windows` venv also exists in this checkout alongside the
-usual `.venv`.)
 
-**Run the app (dev, auto-reload):**
-```powershell
-python -m uvicorn app.main:app --reload
-```
+**Run the app:**
+- Normal operation: the `ConlonHub MARVIS` scheduled task runs
+  `scripts\start_marvis_hidden.py` → `scripts\start_marvis.ps1` (Ollama
+  `qwen3.5:9b`, `127.0.0.1:8000`, no reload). Restart it after code changes:
+  `Stop-ScheduledTask "ConlonHub MARVIS"; Start-ScheduledTask "ConlonHub MARVIS"`.
+  Runtime log: `%LOCALAPPDATA%\ConlonHub\logs\marvis-runtime.log`.
+- Dev with reload (stop the scheduled task first to free port 8000):
+  `.\scripts\start_marvis.ps1 -Reload`
+- Chat from the terminal: `.\scripts\chat_marvis.ps1`
+
 Key local URLs once running:
-- http://127.0.0.1:8000/
-- http://127.0.0.1:8000/loaded-modules
-- http://127.0.0.1:8000/tradingbot/paper-orders
-- http://127.0.0.1:8000/tradingbot/paper-account
-- http://127.0.0.1:8000/docs  (Swagger UI)
+- http://127.0.0.1:8000/ , /loaded-modules , /ai/status — open
+- http://127.0.0.1:8000/tradingbot/* , /ai/conversations — bearer credential required
+- http://127.0.0.1:8000/docs (Swagger UI; use Authorize for protected routes)
 
-**Run tests:**
+**Run tests** (from `Projects\Core`):
 ```powershell
-python -m unittest discover -s tests -v
+.\.venv\Scripts\python.exe -m unittest discover -s tests
 ```
-The suite is `unittest`-based (not pytest, despite a stray `.pytest_cache/` in the
-tree). As of this writing it contains 25 TradingBot safety tests across
-`tests/test_paper_account.py`, `tests/test_paper_pnl.py`,
-`tests/test_paper_portfolio.py`, `tests/test_tradingbot.py`,
-`tests/test_tradingbot_account.py`.
+`unittest`-based. 325 tests as of 2026-10-20, covering TradingBot safety, auth,
+AI providers/router/orchestration, capabilities, migrations, launcher, phone and
+ASGI smoke tests. Five "Security audit event could not be persisted." lines are
+expected: they come from tests exercising the audit-failure path.
 
-**No separate lint/format command was found** (no ruff/black/flake8 config or
-pre-commit hooks discovered in this project directory) — treat this as unconfirmed
-absence rather than a strict rule; re-check if tooling is added later.
+**No lint/format tooling** is configured (no ruff/black/flake8/pre-commit config);
+re-check if tooling is added later.
 
-**Repo-root Windows utility commands** (this is a Windows box; prefer PowerShell
-cmdlets over Unix tools when working outside the Bash tool):
-`Get-ChildItem` (ls), `Set-Location` (cd), `Get-Content` (cat), `Select-String`
-(grep), `Get-ChildItem -Recurse -Filter` (find). Inside the Bash tool (git-bash),
-standard POSIX `ls`/`cat`/`git` work as shown in this memory.
+**Shell notes:** this is a Windows box; prefer PowerShell cmdlets outside the Bash
+tool. Inside the Bash tool (Git Bash), POSIX `ls`/`cat`/`grep`/`git` work.

@@ -59,7 +59,8 @@ class AIAssistantResponseTests(unittest.TestCase):
 
         AIAssistant(provider=provider).respond("Next", history=history)
 
-        self.assertEqual(provider.histories, [history])
+        self.assertEqual(provider.histories[0][1:], history)
+        self.assertEqual(provider.histories[0][0][0], "system")
 
     def test_default_provider_fails_explicitly(self):
         with self.assertRaisesRegex(
