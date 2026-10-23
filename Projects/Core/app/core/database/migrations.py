@@ -134,6 +134,10 @@ def _create_approval_requests_table(connection: sqlite3.Connection) -> None:
     )
 
 
+def _add_approval_outcome_column(connection: sqlite3.Connection) -> None:
+    connection.execute("ALTER TABLE approval_requests ADD COLUMN outcome TEXT")
+
+
 _MIGRATIONS: dict[str, tuple[tuple[int, str, Migration], ...]] = {
     "auth": ((1, "create_auth_tables", _create_auth_tables),),
     "audit": ((1, "create_audit_table", _create_audit_table),),
@@ -144,6 +148,7 @@ _MIGRATIONS: dict[str, tuple[tuple[int, str, Migration], ...]] = {
     ),
     "approvals": (
         (1, "create_approval_requests_table", _create_approval_requests_table),
+        (2, "add_approval_outcome_column", _add_approval_outcome_column),
     ),
 }
 

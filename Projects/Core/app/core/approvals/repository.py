@@ -15,10 +15,12 @@ from app.core.database import migrate_database
 
 
 DEFAULT_APPROVAL_TTL = timedelta(minutes=15)
+MAX_PENDING_APPROVALS = 5
+MAX_OUTCOME_LENGTH = 500
 
 _COLUMNS = (
     "request_id, principal_id, capability, arguments, arguments_digest, "
-    "summary, status, created_at, expires_at, decided_at"
+    "summary, status, created_at, expires_at, decided_at, outcome"
 )
 
 
@@ -27,6 +29,14 @@ class ApprovalNotFound(LookupError):
 
 
 class ApprovalNotPending(ValueError):
+    pass
+
+
+class ApprovalNotApproved(ValueError):
+    pass
+
+
+class ApprovalLimitReached(ValueError):
     pass
 
 
@@ -51,6 +61,7 @@ def _from_row(row) -> ApprovalRequest:
         created_at=row[7],
         expires_at=row[8],
         decided_at=row[9],
+        outcome=row[10],
     )
 
 
@@ -118,9 +129,21 @@ class SqliteApprovalRepository:
 
         with closing(self._connect()) as connection:
             with connection:
+                # Lock so concurrent proposals cannot both slip under the limit.
+                connection.execute("BEGIN IMMEDIATE")
+                self._expire_stale(connection, request.created_at, principal_id=principal_id)
+                pending = connection.execute(
+                    "SELECT COUNT(*) FROM approval_requests "
+                    "WHERE principal_id = ? AND status = 'pending'",
+                    (principal_id,),
+                ).fetchone()[0]
+                if pending >= MAX_PENDING_APPROVALS:
+                    raise ApprovalLimitReached(
+                        f"At most {MAX_PENDING_APPROVALS} approval requests may be pending."
+                    )
                 connection.execute(
                     f"INSERT INTO approval_requests ({_COLUMNS}) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         request.request_id,
                         request.principal_id,
@@ -131,6 +154,7 @@ class SqliteApprovalRepository:
                         request.status.value,
                         request.created_at,
                         request.expires_at,
+                        None,
                         None,
                     ),
                 )
@@ -195,5 +219,36 @@ class SqliteApprovalRepository:
         if updated != 1:
             raise ApprovalNotPending(
                 f"Approval request is {request.status.value}, not pending."
+            )
+        return request
+
+    def mark_executed(self, request_id: str, principal_id: str, outcome: str) -> ApprovalRequest:
+        return self._record_outcome(request_id, principal_id, ApprovalStatus.EXECUTED, outcome)
+
+    def mark_failed(self, request_id: str, principal_id: str, outcome: str) -> ApprovalRequest:
+        return self._record_outcome(request_id, principal_id, ApprovalStatus.FAILED, outcome)
+
+    def _record_outcome(self, request_id, principal_id, status, outcome):
+        if not isinstance(outcome, str) or not outcome.strip():
+            raise ValueError("outcome must be a non-empty string.")
+        outcome = outcome.strip()[:MAX_OUTCOME_LENGTH]
+
+        with closing(self._connect()) as connection:
+            with connection:
+                connection.execute("BEGIN IMMEDIATE")
+                # Only an approved request moves on, and only once: at most one outcome.
+                updated = connection.execute(
+                    "UPDATE approval_requests SET status = ?, outcome = ? "
+                    "WHERE request_id = ? AND principal_id = ? AND status = 'approved'",
+                    (status.value, outcome, request_id, principal_id),
+                ).rowcount
+                row = self._select(connection, request_id, principal_id)
+
+        if row is None:
+            raise ApprovalNotFound(request_id)
+        request = _from_row(row)
+        if updated != 1:
+            raise ApprovalNotApproved(
+                f"Approval request is {request.status.value}, not approved."
             )
         return request

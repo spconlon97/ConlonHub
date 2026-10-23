@@ -135,6 +135,23 @@ class ApprovalRequestTests(unittest.TestCase):
                 )
                 self.assertEqual(decided.status, status)
 
+    def test_outcome_required_only_after_execution(self):
+        decided = (_CREATED + timedelta(minutes=1)).isoformat(timespec="microseconds")
+        for status in (ApprovalStatus.EXECUTED, ApprovalStatus.FAILED):
+            with self.subTest(status=status):
+                for outcome in (None, "", "  "):
+                    with self.assertRaises(ValueError):
+                        _request(status=status, decided_at=decided, outcome=outcome)
+                self.assertEqual(
+                    _request(status=status, decided_at=decided, outcome="Done.").outcome,
+                    "Done.",
+                )
+
+        with self.assertRaises(ValueError):
+            _request(outcome="Too early.")
+        with self.assertRaises(ValueError):
+            _request(status=ApprovalStatus.APPROVED, decided_at=decided, outcome="x")
+
     def test_request_is_immutable(self):
         request = _request()
         with self.assertRaises(Exception):

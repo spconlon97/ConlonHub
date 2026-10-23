@@ -23,6 +23,9 @@ _DECIDED_STATUSES = {
     ApprovalStatus.FAILED,
 }
 
+# Statuses reached after an approved request ran; they must record the outcome.
+_EXECUTION_STATUSES = {ApprovalStatus.EXECUTED, ApprovalStatus.FAILED}
+
 
 def canonical_arguments(arguments) -> str:
     if not isinstance(arguments, dict):
@@ -78,6 +81,7 @@ class ApprovalRequest:
     created_at: str
     expires_at: str
     decided_at: str | None = None
+    outcome: str | None = None
 
     def __post_init__(self):
         _require_text(self.request_id, "request_id")
@@ -105,3 +109,8 @@ class ApprovalRequest:
             _parse_utc(self.decided_at, "decided_at")
         elif self.decided_at is not None:
             raise ValueError(f"A {self.status.value} request has no decision time.")
+
+        if self.status in _EXECUTION_STATUSES:
+            _require_text(self.outcome, "outcome")
+        elif self.outcome is not None:
+            raise ValueError(f"A {self.status.value} request has no outcome.")

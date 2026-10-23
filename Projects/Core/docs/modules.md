@@ -35,22 +35,41 @@ All database paths are relative to the repository root (`Databases/`), not
 - **Startup/shutdown:** no lifespan or startup/shutdown hooks are defined. [code]
   Stop with Ctrl+C or by ending the launcher process. [unverified]
 
-## Approval requests (`app/core/approvals/`) — Phase 3A, storage only
+## Approval gates (`app/core/approvals/`) — Phase 3A/3B
 
-- **Purpose:** records human approval requests for future ACTION capabilities.
-  Not yet wired to any endpoint or to tool orchestration, and nothing is executed
-  from it. [code][test]
+- **Purpose:** human approval for ACTION capabilities. MARVIS can only
+  *propose* an action; a human approves it; it then runs at most once.
+  No ACTION capability is registered in the running app yet (Phase 3C).
+  [code][test]
 - **Model:** `ApprovalRequest` with status `pending`/`approved`/`rejected`/
   `expired`/`executed`/`failed`; `arguments_digest` (SHA-256 of canonical JSON)
-  binds an approval to the exact arguments. [code][test]
+  binds an approval to the exact arguments; `outcome` records the result or a
+  short failure reason. [code][test]
 - **Repository:** `SqliteApprovalRepository` — `create`, `get`, `list_pending`,
-  `decide`. Scoped per principal; 15-minute default expiry; a request can be
-  decided once, never after expiry; no delete. [code][test]
+  `decide`, `mark_executed`, `mark_failed`. Scoped per principal; 15-minute
+  default expiry; at most 5 pending per principal; decided once, never after
+  expiry; an outcome is recorded once, only on an approved request; no delete.
+  [code][test]
+- **Registry check:** `CapabilityRegistry.execute()` refuses ACTION
+  capabilities. `execute_approved(request)` is the only way to run one and
+  re-checks: status `approved`, capability still registered and still ACTION,
+  arguments digest unchanged. ACTION capabilities must define `summarize`.
+  [code][test]
+- **Orchestration:** when `/ai/respond` or `/phone/api/respond` supplies the
+  principal and approval store, ACTION capabilities appear in the catalog as
+  proposals. A proposal creates a pending request and ends the turn with a fixed
+  reply (summary, request ID, expiry, "nothing has been done yet"). The model has
+  no tool to approve or execute. [code][test]
+- **Endpoints:** bearer — `GET /approvals`, `GET /approvals/{id}`,
+  `POST /approvals/{id}/approve`, `POST /approvals/{id}/reject`. Phone (Tailscale
+  identity) — the same under `/phone/api/approvals`. Bearer and phone users are
+  different principals. 404 for another principal's request, 409 if not
+  pending. Approve = decide → `execute_approved` → `executed` or `failed`, plus
+  an `approval.approve`/`approval.reject` audit event. [code][test]
+- **At most once:** the decision is committed before execution; a request left
+  `approved` by a crash is never re-run and there is no retry endpoint. [code]
 - **Data owned:** `Databases/core_approvals.db` (migration component
-  `approvals`), created on first use. [code]
-- **Known gap (for Phase 3B):** `CapabilityRegistry.execute()` does not check
-  access level; only orchestration refuses ACTION capabilities. Close before
-  registering any ACTION. [code]
+  `approvals`, version 2), created on first use. [code]
 
 ## MARVIS AI Assistant (`app/modules/ai/`)
 

@@ -9,6 +9,9 @@ from tempfile import TemporaryDirectory
 from app.core.approvals.models import ApprovalStatus, arguments_digest
 from app.core.approvals.repository import (
     DEFAULT_APPROVAL_TTL,
+    MAX_PENDING_APPROVALS,
+    ApprovalLimitReached,
+    ApprovalNotApproved,
     ApprovalNotFound,
     ApprovalNotPending,
     SqliteApprovalRepository,
@@ -237,12 +240,90 @@ class SqliteApprovalRepositoryTests(unittest.TestCase):
         with self.assertRaises(ApprovalNotPending):
             other.decide(request.request_id, "p-1", approve=False)
 
+    # --- pending limit -----------------------------------------------------
+
+    def test_pending_limit_is_five(self):
+        self.assertEqual(MAX_PENDING_APPROVALS, 5)
+
+    def test_sixth_pending_request_is_refused_and_not_stored(self):
+        for _ in range(MAX_PENDING_APPROVALS):
+            self._create()
+
+        with self.assertRaises(ApprovalLimitReached):
+            self._create()
+
+        self.assertEqual(len(self.repository.list_pending("p-1")), MAX_PENDING_APPROVALS)
+
+    def test_limit_is_per_principal_and_frees_up_after_decision_or_expiry(self):
+        created = [self._create() for _ in range(MAX_PENDING_APPROVALS)]
+
+        self._create(principal_id="p-2")
+
+        self.repository.decide(created[0].request_id, "p-1", approve=False)
+        self._create()
+
+        self.clock.advance(DEFAULT_APPROVAL_TTL)
+        self._create()
+
+    # --- execution outcome -------------------------------------------------
+
+    def _approved(self):
+        request = self._create()
+        return self.repository.decide(request.request_id, "p-1", approve=True)
+
+    def test_mark_executed_records_outcome_once(self):
+        approved = self._approved()
+
+        executed = self.repository.mark_executed(approved.request_id, "p-1", "Filled.")
+
+        self.assertEqual(executed.status, ApprovalStatus.EXECUTED)
+        self.assertEqual(executed.outcome, "Filled.")
+        self.assertEqual(executed.decided_at, approved.decided_at)
+        with self.assertRaises(ApprovalNotApproved):
+            self.repository.mark_executed(approved.request_id, "p-1", "Again.")
+        with self.assertRaises(ApprovalNotApproved):
+            self.repository.mark_failed(approved.request_id, "p-1", "Late.")
+
+    def test_mark_failed_records_outcome(self):
+        approved = self._approved()
+
+        failed = self.repository.mark_failed(approved.request_id, "p-1", "Rejected by limits.")
+
+        self.assertEqual(failed.status, ApprovalStatus.FAILED)
+        self.assertEqual(failed.outcome, "Rejected by limits.")
+
+    def test_only_approved_requests_can_be_marked(self):
+        pending = self._create()
+        rejected = self.repository.decide(self._create().request_id, "p-1", approve=False)
+
+        for request in (pending, rejected):
+            with self.subTest(status=request.status):
+                with self.assertRaises(ApprovalNotApproved):
+                    self.repository.mark_executed(request.request_id, "p-1", "x")
+
+    def test_marking_is_scoped_to_principal(self):
+        approved = self._approved()
+
+        with self.assertRaises(ApprovalNotFound):
+            self.repository.mark_executed(approved.request_id, "p-2", "x")
+
+    def test_outcome_must_be_text_and_is_truncated(self):
+        approved = self._approved()
+
+        for value in ("", "  ", None):
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError):
+                    self.repository.mark_executed(approved.request_id, "p-1", value)
+
+        executed = self.repository.mark_executed(approved.request_id, "p-1", "y" * 900)
+        self.assertEqual(len(executed.outcome), 500)
+
     # --- storage -----------------------------------------------------------
 
     def test_migration_is_recorded_and_repeatable(self):
         SqliteApprovalRepository(self.database_path, clock=self.clock)
 
-        self.assertEqual(current_schema_version(self.database_path, "approvals"), 1)
+        self.assertEqual(current_schema_version(self.database_path, "approvals"), 2)
 
     def test_database_rejects_unknown_status(self):
         with closing(sqlite3.connect(self.database_path)) as connection:
@@ -259,20 +340,21 @@ class SqliteApprovalRepositoryTests(unittest.TestCase):
     def test_no_delete_operation_is_exposed(self):
         public = {name for name in dir(SqliteApprovalRepository) if not name.startswith("_")}
 
-        self.assertEqual(public, {"create", "decide", "get", "list_pending"})
+        self.assertEqual(
+            public,
+            {"create", "decide", "get", "list_pending", "mark_executed", "mark_failed"},
+        )
 
 
 class ApprovalPackageIsolationTests(unittest.TestCase):
-    def test_no_application_code_imports_approvals_yet(self):
-        app_root = Path(__file__).resolve().parents[1] / "app"
-        pattern = re.compile(r"^\s*(from|import)\s+app\.core\.approvals", re.MULTILINE)
-        importers = [
-            path.relative_to(app_root).as_posix()
-            for path in app_root.rglob("*.py")
-            if "approvals" not in path.parts and pattern.search(path.read_text(encoding="utf-8"))
-        ]
+    def test_approval_storage_does_not_depend_on_application_modules(self):
+        package = Path(__file__).resolve().parents[1] / "app" / "core" / "approvals"
+        pattern = re.compile(r"^\s*(from|import)\s+app\.modules", re.MULTILINE)
 
-        self.assertEqual(importers, [])
+        for name in ("models.py", "repository.py", "service.py", "dependency.py"):
+            with self.subTest(module=name):
+                source = (package / name).read_text(encoding="utf-8")
+                self.assertIsNone(pattern.search(source))
 
 
 if __name__ == "__main__":
