@@ -107,6 +107,33 @@ def _create_ai_rate_limit_table(connection: sqlite3.Connection) -> None:
     )
 
 
+def _create_approval_requests_table(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS approval_requests (
+            request_id TEXT PRIMARY KEY,
+            principal_id TEXT NOT NULL,
+            capability TEXT NOT NULL,
+            arguments TEXT NOT NULL,
+            arguments_digest TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN (
+                'pending', 'approved', 'rejected', 'expired', 'executed', 'failed'
+            )),
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            decided_at TEXT
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_approval_requests_principal_status
+        ON approval_requests (principal_id, status, created_at)
+        """
+    )
+
+
 _MIGRATIONS: dict[str, tuple[tuple[int, str, Migration], ...]] = {
     "auth": ((1, "create_auth_tables", _create_auth_tables),),
     "audit": ((1, "create_audit_table", _create_audit_table),),
@@ -114,6 +141,9 @@ _MIGRATIONS: dict[str, tuple[tuple[int, str, Migration], ...]] = {
     "ai": (
         (1, "create_ai_conversation_tables", _create_ai_conversation_tables),
         (2, "create_ai_rate_limit_table", _create_ai_rate_limit_table),
+    ),
+    "approvals": (
+        (1, "create_approval_requests_table", _create_approval_requests_table),
     ),
 }
 

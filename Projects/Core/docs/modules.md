@@ -35,6 +35,23 @@ All database paths are relative to the repository root (`Databases/`), not
 - **Startup/shutdown:** no lifespan or startup/shutdown hooks are defined. [code]
   Stop with Ctrl+C or by ending the launcher process. [unverified]
 
+## Approval requests (`app/core/approvals/`) — Phase 3A, storage only
+
+- **Purpose:** records human approval requests for future ACTION capabilities.
+  Not yet wired to any endpoint or to tool orchestration, and nothing is executed
+  from it. [code][test]
+- **Model:** `ApprovalRequest` with status `pending`/`approved`/`rejected`/
+  `expired`/`executed`/`failed`; `arguments_digest` (SHA-256 of canonical JSON)
+  binds an approval to the exact arguments. [code][test]
+- **Repository:** `SqliteApprovalRepository` — `create`, `get`, `list_pending`,
+  `decide`. Scoped per principal; 15-minute default expiry; a request can be
+  decided once, never after expiry; no delete. [code][test]
+- **Data owned:** `Databases/core_approvals.db` (migration component
+  `approvals`), created on first use. [code]
+- **Known gap (for Phase 3B):** `CapabilityRegistry.execute()` does not check
+  access level; only orchestration refuses ACTION capabilities. Close before
+  registering any ACTION. [code]
+
 ## MARVIS AI Assistant (`app/modules/ai/`)
 
 - **Purpose:** authenticated chat assistant with stored conversations.
