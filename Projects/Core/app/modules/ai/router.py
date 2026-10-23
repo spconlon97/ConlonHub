@@ -3,6 +3,8 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field, field_validator
 
+from app.core.approvals.dependency import get_approval_repository
+from app.core.approvals.repository import SqliteApprovalRepository
 from app.core.auth.dependency import require_principal
 from app.core.auth.principal import Principal
 from app.core.config import settings
@@ -147,6 +149,7 @@ def create_ai_response(
     repository: SqliteAIConversationRepository = Depends(
         get_ai_conversation_repository
     ),
+    approvals: SqliteApprovalRepository = Depends(get_approval_repository),
 ):
     assistant = get_module_instance("AI Assistant")
     conversation_id = request.conversation_id
@@ -170,7 +173,12 @@ def create_ai_response(
                 principal.principal_id,
                 limit=settings.ai_history_message_limit,
             )
-        response = assistant.respond(request.prompt, history=history)
+        response = assistant.respond(
+            request.prompt,
+            history=history,
+            principal_id=principal.principal_id,
+            approvals=approvals,
+        )
         if conversation_id is None:
             conversation_id = repository.create_conversation(
                 principal.principal_id

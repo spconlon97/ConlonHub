@@ -10,6 +10,7 @@ from tempfile import TemporaryDirectory
 from threading import Barrier
 from unittest.mock import Mock, patch
 
+from app.core.approvals.dependency import get_approval_repository
 from app.core.auth.credentials import hash_api_key
 from app.core.auth.dependency import require_principal
 from app.core.auth.principal import Principal
@@ -35,6 +36,7 @@ class ChatInputRegressionTests(unittest.TestCase):
         try:
             app.dependency_overrides[require_principal] = lambda: Principal("p", "Test")
             app.dependency_overrides[ai_router.get_ai_conversation_repository] = lambda: repository
+            app.dependency_overrides[get_approval_repository] = lambda: Mock()
             with patch.object(ai_router, "get_module_instance", return_value=assistant):
                 for prompt in ("", "   ", "\t\n", "\u2003"):
                     with self.subTest(prompt=repr(prompt)):

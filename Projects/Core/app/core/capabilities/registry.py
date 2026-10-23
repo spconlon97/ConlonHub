@@ -1,4 +1,5 @@
-﻿from app.core.capabilities.models import Capability
+﻿from app.core.approvals.models import ApprovalRequest, ApprovalStatus, arguments_digest
+from app.core.capabilities.models import Capability, CapabilityAccess
 
 
 class CapabilityNotFound(KeyError):
@@ -6,6 +7,10 @@ class CapabilityNotFound(KeyError):
 
 
 class CapabilityAlreadyRegistered(ValueError):
+    pass
+
+
+class CapabilityRequiresApproval(PermissionError):
     pass
 
 
@@ -38,4 +43,26 @@ class CapabilityRegistry:
 
     def execute(self, name: str, **arguments):
         capability = self.get(name)
+        if capability.access != CapabilityAccess.READ:
+            raise CapabilityRequiresApproval(
+                f"Capability {capability.name!r} requires an approved request."
+            )
         return capability.handler(**arguments)
+
+    def execute_approved(self, request: ApprovalRequest):
+        """The only path that runs an ACTION: re-checks the approval first."""
+        if not isinstance(request, ApprovalRequest):
+            raise TypeError("request must be an ApprovalRequest.")
+
+        if request.status != ApprovalStatus.APPROVED:
+            raise CapabilityRequiresApproval("Approval request is not approved.")
+
+        capability = self.get(request.capability)
+        if capability.access != CapabilityAccess.ACTION:
+            raise CapabilityRequiresApproval("Approved capability is no longer an ACTION.")
+
+        # The record validates its digest when built; re-check in case it was altered.
+        if arguments_digest(request.arguments) != request.arguments_digest:
+            raise CapabilityRequiresApproval("Approved arguments have changed.")
+
+        return capability.handler(**request.arguments)

@@ -28,10 +28,11 @@ Key local URLs once running:
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests
 ```
-`unittest`-based. 325 tests as of 2026-10-20, covering TradingBot safety, auth,
-AI providers/router/orchestration, capabilities, migrations, launcher, phone and
-ASGI smoke tests. Five "Security audit event could not be persisted." lines are
-expected: they come from tests exercising the audit-failure path.
+`unittest`-based. 414 tests as of 2026-10-23, covering TradingBot safety, auth,
+AI providers/router/orchestration, capabilities, approval gates, migrations,
+launcher, phone and ASGI smoke tests. Six "Security audit event could not be
+persisted." lines are expected: they come from tests exercising the
+audit-failure path. Or run the `/verify` project skill.
 
 **No lint/format tooling** is configured (no ruff/black/flake8/pre-commit config);
 re-check if tooling is added later.
