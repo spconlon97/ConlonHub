@@ -67,7 +67,7 @@ The goal is not the most features. The goal is the strongest complete product.
 
 | Role | Owns | Must review |
 |---|---|---|
-| **CEO / Product Owner** | Vision, scope, priorities, decisions D1–D9 (Section 4), release approval | Every phase exit gate |
+| **CEO / Product Owner** | Vision, scope, priorities, decisions D1–D10 (Section 4), release approval | Every phase exit gate |
 | **CTO** | Stack, architecture, engineering standards, build/CI, technical debt | Any new dependency, module or abstraction. Reject complexity that does not buy user value. |
 | **CPO** | Competitive research, personas, requirements, roadmap, accessibility priorities | Every feature: which real user problem does it solve? |
 | **Lead Android Engineer** | Kotlin, Compose, lifecycle, coroutines/Flow, Room, Hilt, storage, package visibility, input, large-screen layouts | All Android platform decisions |
@@ -136,6 +136,9 @@ These decisions shape the architecture. Phase 0 must research each one, present 
 | **D7** | **Reference devices** | The CEO must list the physical tablets (and any handhelds/phones) available for testing. This list is the real-device test matrix and the basis for performance targets. Include at least one mid-range tablet. |
 | **D8** | **Product name and trademark** | "ATLAS" is a provisional name. Run a trademark and store-listing conflict check before brand work in Phase 4. |
 | **D9** | **Save data scope** | Recommendation: ATLAS does not manage emulator saves in MVP. Post-MVP, consider backing up known save folders. State the decision clearly to users. |
+| **D10** | **External launch only, or embedded emulator cores for some systems** | Embedding libretro cores (the Lemuroid model) gives ATLAS full control of launching but very likely makes ATLAS GPL, rules out non-commercial cores in a paid product, and greatly enlarges scope. Recommendation: external launch only for MVP. See `research/OPEN_SOURCE_EMULATORS.md` §5. |
+
+Phase 0 research input: `research/OPEN_SOURCE_EMULATORS.md` (open-source emulator survey, launch methods, licences). Its key finding for D1/D2: RetroArch needs real file paths, so a SAF-only storage strategy likely excludes RetroArch, and with it the only maintained open-source route to PS1.
 
 ---
 
@@ -147,7 +150,7 @@ Supporting a system in ATLAS does not mean a working Android emulator exists for
 
 | Tier | Systems | Target |
 |---|---|---|
-| **Tier 1 — MVP** [PROPOSED, confirm after Phase 0 spike] | NES, SNES, Game Boy, Game Boy Color, Game Boy Advance, Mega Drive/Genesis, Master System, Game Gear, PlayStation | Verified end-to-end launch on reference devices |
+| **Tier 1 — MVP** [PROPOSED, confirm after Phase 0 spike] | NES, SNES, Game Boy, Game Boy Color, Game Boy Advance, Mega Drive/Genesis, Master System, Game Gear, PlayStation | Verified end-to-end launch on reference devices. PlayStation is the riskiest: no maintained open-source standalone emulator exists, so it depends on RetroArch (see research). |
 | **Tier 2 — Post-MVP core** | Nintendo 64, Nintendo DS, PSP, PC Engine/TurboGrafx-16, Sega CD, 32X, Saturn, Dreamcast, GameCube, Wii, PlayStation 2, Nintendo 3DS, Atari systems, Neo Geo (non-arcade), WonderSwan | Added as integrations are verified. Several of these depend on emulators that have been discontinued or forked in recent years; verify current, maintained options. |
 | **Tier 3 — Experimental** | Arcade (MAME, FinalBurn Neo), ScummVM, DOS | These behave differently and must not block the core: arcade games depend on matching ROM-set versions to the emulator version; ScummVM launches by game ID, not by file; DOS games often need per-game configuration. |
 
@@ -443,8 +446,8 @@ Deliver:
 
 - Competitor comparison (sourced and dated)
 - User personas, with tablet users as the primary persona
-- Answers and recommendations for decisions D1–D9
-- **Launch feasibility spike:** a throwaway Android app, run on a reference tablet, that picks a file and launches it in 3–5 target emulators (including RetroArch and at least two standalone emulators). Record for each: package, mechanism, path vs content URI behaviour, permission grants needed, and result.
+- Answers and recommendations for decisions D1–D10
+- **Launch feasibility spike:** a throwaway Android app, run on a reference tablet, that picks a file and launches it in 3–5 target emulators covering all four launch styles found in research (real file path, SAF URI, FileProvider URI, custom action). Proposed set: RetroArch with a PS1 and a SNES core, PPSSPP, melonDS, NES.emu or GBA.emu, and Dolphin as a stretch goal (`research/OPEN_SOURCE_EMULATORS.md` §6). Record for each: package, mechanism, path vs content URI behaviour, permission grants needed, and result.
 - **Storage benchmark:** scan time and memory for a 20,000-file test library with each candidate storage strategy.
 - Legal and licensing assessment (dependencies, metadata providers, store policy, trademark)
 - MVP definition and confirmed Tier 1 system list
@@ -452,7 +455,7 @@ Deliver:
 - Risk register
 - Prioritised backlog with acceptance criteria
 
-**Exit gate:** CEO approves decisions D1–D9, the spike results and the MVP scope.
+**Exit gate:** CEO approves decisions D1–D10, the spike results and the MVP scope.
 
 ### Phase 1 — Vertical slice
 
@@ -583,7 +586,7 @@ Build this as if the company's reputation depends on it: exceptional engineering
 |---|---|
 | Phase order | Launch feasibility moved into Phase 0; a vertical slice now comes before the design system; emulator integration moved from Phase 4 to Phase 3 and proven in Phase 1. |
 | Primary device | Tablets are now the primary design target; handhelds and phones are secondary; TV and foldables are post-MVP. Tablet-specific requirements added. |
-| Decisions | Nine explicit Phase 0 decisions added (distribution, storage, app mode, metadata, monetisation, analytics, devices, name, saves). |
+| Decisions | Ten explicit Phase 0 decisions added (distribution, storage, app mode, metadata, monetisation, analytics, devices, name, saves, embedded cores). |
 | Migration | Importing from other frontends is now a headline feature. |
 | Emulator registry | Profiles are versioned, signed data with a launch self-test and an ongoing owner (new Phase 8). |
 | Systems | Split into three tiers; arcade, ScummVM and DOS marked experimental. |
