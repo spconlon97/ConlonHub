@@ -570,7 +570,7 @@ A beautiful prototype alone does not meet these criteria. A working backend with
 Do not write production code yet.
 
 1. Complete every Phase 0 deliverable in Section 16, including the launch feasibility spike and the storage benchmark.
-2. Present options and a recommendation for each decision D1–D9.
+2. Present options and a recommendation for each decision D1–D10.
 3. Present the Phase 0 executive report in the Section 17 format.
 4. Then provide a detailed plan for Phase 1 (the vertical slice).
 
