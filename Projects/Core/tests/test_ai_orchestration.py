@@ -131,6 +131,7 @@ class ToolExecutionTests(unittest.TestCase):
                 description="Place a paper order.",
                 access=CapabilityAccess.ACTION,
                 handler=lambda: "should never execute",
+                summarize=lambda: "Place a paper order",
             )
         )
 

@@ -160,9 +160,30 @@ class AIResponseHandlerTests(unittest.TestCase):
         def delete_conversation(self, conversation_id, principal_id):
             self.deleted = (conversation_id, principal_id)
 
+    def test_passes_principal_and_approvals_to_assistant(self):
+        received = {}
+
+        class FakeAssistant:
+            def respond(self, prompt, history=(), **context):
+                received.update(context)
+                return "ok"
+
+        approvals = object()
+        with patch.object(
+            ai_router_module, "get_module_instance", return_value=FakeAssistant()
+        ):
+            ai_router_module.create_ai_response(
+                ai_router_module.AIResponseRequest(prompt="question"),
+                self.principal,
+                self.FakeRepository(),
+                approvals,
+            )
+
+        self.assertEqual(received, {"principal_id": "p-1", "approvals": approvals})
+
     def test_delegates_to_loader_managed_assistant(self):
         class FakeAssistant:
-            def respond(self, prompt, history=()):
+            def respond(self, prompt, history=(), **_context):
                 return f"answer: {prompt}"
 
         repository = self.FakeRepository()
@@ -190,7 +211,7 @@ class AIResponseHandlerTests(unittest.TestCase):
 
     def test_unavailable_provider_maps_to_503(self):
         class FakeAssistant:
-            def respond(self, prompt, history=()):
+            def respond(self, prompt, history=(), **_context):
                 raise AIProviderUnavailable("offline")
 
         repository = self.FakeRepository()
@@ -211,7 +232,7 @@ class AIResponseHandlerTests(unittest.TestCase):
 
     def test_invalid_provider_response_maps_to_502(self):
         class FakeAssistant:
-            def respond(self, prompt, history=()):
+            def respond(self, prompt, history=(), **_context):
                 raise ValueError("bad response")
 
         with patch.object(
@@ -236,7 +257,7 @@ class AIResponseHandlerTests(unittest.TestCase):
                 raise ConversationNotFound("hidden")
 
         class FakeAssistant:
-            def respond(self, prompt, history=()):
+            def respond(self, prompt, history=(), **_context):
                 raise AssertionError("provider should not be called")
 
         with patch.object(
@@ -259,7 +280,7 @@ class AIResponseHandlerTests(unittest.TestCase):
             def __init__(self):
                 self.history = None
 
-            def respond(self, prompt, history=()):
+            def respond(self, prompt, history=(), **_context):
                 self.history = history
                 return "answer"
 
@@ -293,7 +314,7 @@ class AIResponseHandlerTests(unittest.TestCase):
                 return False
 
         class FakeAssistant:
-            def respond(self, prompt, history=()):
+            def respond(self, prompt, history=(), **_context):
                 raise AssertionError("provider should not be called")
 
         with patch.object(

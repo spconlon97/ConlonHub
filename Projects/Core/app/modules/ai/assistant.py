@@ -36,10 +36,11 @@ class AIAssistant(ModuleBase):
             "model": self.provider.model,
         }
 
-    def respond(self, prompt: str, history=()) -> str:
+    def respond(self, prompt: str, history=(), principal_id=None, approvals=None) -> str:
         if not isinstance(prompt, str) or not prompt.strip():
             raise ValueError("prompt must be a non-empty string.")
 
         return generate_with_tools(
             self.provider, self.registry, prompt.strip(), history=history,
+            approvals=approvals, principal_id=principal_id,
         )

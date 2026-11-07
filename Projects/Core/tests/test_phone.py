@@ -74,6 +74,7 @@ class PhoneRouterTests(unittest.TestCase):
         request = AIResponseRequest(prompt="hello")
         principal = phone_module.Principal("tailscale:test", "Test User")
         repository = object()
+        approvals = object()
 
         with patch.object(
             phone_module,
@@ -81,11 +82,13 @@ class PhoneRouterTests(unittest.TestCase):
             return_value="response",
         ) as create_response:
             result = phone_module.create_phone_response(
-                request, principal, repository
+                request, principal, repository, approvals
             )
 
         self.assertEqual(result, "response")
-        create_response.assert_called_once_with(request, principal, repository)
+        create_response.assert_called_once_with(
+            request, principal, repository, approvals
+        )
 
 
 if __name__ == "__main__":

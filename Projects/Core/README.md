@@ -232,6 +232,25 @@ python -m unittest discover -s tests -v
 The suite covers TradingBot safety behaviour, the Core module registry and loader, the AI Assistant router, and ASGI-level smoke tests exercising the assembled application end to end.
 The local paper-order database is created at `Databases/paper_orders.db` from the repository root. It is generated automatically, survives application restarts, and is excluded from Git.
 
+## Approval gates
+
+MARVIS can only *propose* an ACTION; nothing runs until you approve it. A
+proposal replies with the summary, a request ID and an expiry (15 minutes).
+At most 5 requests may be pending per user. An approved request runs at most
+once.
+
+```http
+GET  /approvals
+GET  /approvals/{request_id}
+POST /approvals/{request_id}/approve
+POST /approvals/{request_id}/reject
+```
+
+These require the Core bearer credential. The phone chat uses the same routes
+under `/phone/api/approvals`. Requests made through the phone can only be
+decided through the phone, and bearer requests only with the bearer credential.
+No ACTION capability is registered yet.
+
 ## Paper-order API
 
 Every `/tradingbot` endpoint requires the Core bearer credential

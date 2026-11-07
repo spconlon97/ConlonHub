@@ -4,7 +4,13 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 
+from app.core.approvals import router as approvals
+from app.core.approvals.dependency import get_approval_repository
+from app.core.approvals.repository import SqliteApprovalRepository
+from app.core.auth.audit import SqliteAuditRepository
+from app.core.auth.dependency import get_audit_repository
 from app.core.auth.principal import Principal
+from app.core.capabilities.registry import CapabilityRegistry
 from app.modules.loader import get_module_instance
 from app.modules.ai.repository import SqliteAIConversationRepository
 from app.modules.ai.router import (
@@ -61,5 +67,48 @@ def create_phone_response(
     repository: SqliteAIConversationRepository = Depends(
         get_ai_conversation_repository
     ),
+    approval_repository: SqliteApprovalRepository = Depends(get_approval_repository),
 ):
-    return create_ai_response(request, principal, repository)
+    return create_ai_response(request, principal, repository, approval_repository)
+
+
+@router.get("/api/approvals", response_model=approvals.ApprovalList)
+def list_phone_approvals(
+    principal: Principal = Depends(require_tailscale_principal),
+    repository: SqliteApprovalRepository = Depends(get_approval_repository),
+):
+    return approvals.list_pending_approvals(principal, repository)
+
+
+@router.get("/api/approvals/{request_id}", response_model=approvals.ApprovalView)
+def read_phone_approval(
+    request_id: str,
+    principal: Principal = Depends(require_tailscale_principal),
+    repository: SqliteApprovalRepository = Depends(get_approval_repository),
+):
+    return approvals.get_approval(request_id, principal, repository)
+
+
+@router.post("/api/approvals/{request_id}/approve", response_model=approvals.ApprovalView)
+def approve_phone_approval(
+    request_id: str,
+    http_request: Request,
+    principal: Principal = Depends(require_tailscale_principal),
+    repository: SqliteApprovalRepository = Depends(get_approval_repository),
+    registry: CapabilityRegistry = Depends(approvals.get_capability_registry),
+    audit: SqliteAuditRepository | None = Depends(get_audit_repository),
+):
+    return approvals.approve_approval(
+        request_id, principal, repository, registry, audit, http_request
+    )
+
+
+@router.post("/api/approvals/{request_id}/reject", response_model=approvals.ApprovalView)
+def reject_phone_approval(
+    request_id: str,
+    http_request: Request,
+    principal: Principal = Depends(require_tailscale_principal),
+    repository: SqliteApprovalRepository = Depends(get_approval_repository),
+    audit: SqliteAuditRepository | None = Depends(get_audit_repository),
+):
+    return approvals.reject_approval(request_id, principal, repository, audit, http_request)

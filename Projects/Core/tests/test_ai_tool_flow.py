@@ -26,7 +26,7 @@ class ToolFlowTests(unittest.TestCase):
         ))
         self.registry.register(Capability(
             "example.action", "Change balance", CapabilityAccess.ACTION,
-            self.action,
+            self.action, summarize=lambda **_arguments: "Change balance",
         ))
         self.provider = Mock()
         self.assistant = AIAssistant(self.provider, registry=self.registry)
