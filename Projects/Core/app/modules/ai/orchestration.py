@@ -89,7 +89,19 @@ def _propose_action(capability, request, approvals, principal_id):
     """Turn a model ACTION request into a pending approval; never execute it."""
     try:
         signature(capability.handler).bind(**request.arguments)
+    except TypeError as error:
+        raise ToolOrchestrationError("MARVIS could not prepare the approval request.") from error
+
+    try:
         summary = capability.summarize(**request.arguments)
+    except ValueError as error:
+        # Capability validation messages (limits, cash, bad input) are for the user.
+        reason = str(error).strip().rstrip(".") or "the request is invalid"
+        return f"Approval not created: {reason}. Nothing has been done."
+    except Exception as error:
+        raise ToolOrchestrationError("MARVIS could not prepare the approval request.") from error
+
+    try:
         if not isinstance(summary, str) or not summary.strip():
             raise ValueError("ACTION summary must be a non-empty string.")
         approval = approvals.create(

@@ -110,8 +110,30 @@ class ActionProposalTests(unittest.TestCase):
 
         self.assertEqual(self.approvals.list_pending("p-1"), ())
 
-    def test_failing_or_blank_summary_creates_nothing(self):
-        for summarize in (Mock(side_effect=ValueError("bad")), lambda amount: "  "):
+    def test_validation_refusal_gets_fixed_reply_and_creates_nothing(self):
+        registry = CapabilityRegistry()
+        registry.register(Capability(
+            "example.transfer", "Move", CapabilityAccess.ACTION,
+            lambda amount: None,
+            summarize=Mock(side_effect=ValueError("Amount exceeds the limit.")),
+        ))
+        self.provider.generate.side_effect = [
+            tool_request("example.transfer", {"amount": "5"}),
+        ]
+
+        reply = generate_with_tools(
+            self.provider, registry, "Move",
+            approvals=self.approvals, principal_id="p-1",
+        )
+
+        self.assertEqual(
+            reply,
+            "Approval not created: Amount exceeds the limit. Nothing has been done.",
+        )
+        self.assertEqual(self.approvals.list_pending("p-1"), ())
+
+    def test_unexpected_summary_failure_or_blank_summary_creates_nothing(self):
+        for summarize in (Mock(side_effect=RuntimeError("internal")), lambda amount: "  "):
             with self.subTest(summarize=summarize):
                 registry = CapabilityRegistry()
                 registry.register(Capability(

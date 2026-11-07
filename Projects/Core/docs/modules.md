@@ -39,8 +39,19 @@ All database paths are relative to the repository root (`Databases/`), not
 
 - **Purpose:** human approval for ACTION capabilities. MARVIS can only
   *propose* an action; a human approves it; it then runs at most once.
-  No ACTION capability is registered in the running app yet (Phase 3C).
+  The only registered ACTION is `trading.place_paper_order` (Phase 3C).
   [code][test]
+- **`trading.place_paper_order`:** arguments `symbol`, `side` (`buy`/`sell`),
+  `quantity`, `price`. `summarize` parses them and refuses orders over the cap
+  or that cash/positions cannot cover, before any approval is created; such
+  refusals reach the user as a fixed "Approval not created: …" reply. The
+  handler calls `TradingBot.place_paper_order()`, which re-checks every limit
+  at approval time, and returns the order plus the new paper cash balance.
+  [code][test]
+- **Phone UI:** `/phone` shows a "Pending approvals" panel (summary, exact
+  arguments, live expiry countdown, Approve/Reject) loaded from
+  `/phone/api/approvals`, refreshed on load and after every reply; built with
+  `textContent` only. [code][test]
 - **Model:** `ApprovalRequest` with status `pending`/`approved`/`rejected`/
   `expired`/`executed`/`failed`; `arguments_digest` (SHA-256 of canonical JSON)
   binds an approval to the exact arguments; `outcome` records the result or a

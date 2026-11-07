@@ -70,6 +70,32 @@ class PhoneRouterTests(unittest.TestCase):
         self.assertNotIn("api_key", source)
         self.assertIn("/phone/api/respond", source)
 
+    def test_phone_page_lists_and_decides_approvals_safely(self):
+        source = Path(phone_module.__file__).with_name("phone.html").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("/phone/api/approvals", source)
+        self.assertIn("/approve", source)
+        self.assertIn("/reject", source)
+        # Approval cards are built with textContent; the only innerHTML is the
+        # static welcome text, so MARVIS output cannot inject markup.
+        self.assertEqual(source.count("innerHTML"), 1)
+        self.assertIn(
+            "welcome.innerHTML = '<strong>New private conversation</strong>", source
+        )
+
+    def test_phone_approval_routes_are_registered(self):
+        routes = {
+            (route.path, method)
+            for route in phone_module.router.routes
+            for method in route.methods
+        }
+
+        self.assertIn(("/phone/api/approvals", "GET"), routes)
+        self.assertIn(("/phone/api/approvals/{request_id}/approve", "POST"), routes)
+        self.assertIn(("/phone/api/approvals/{request_id}/reject", "POST"), routes)
+
     def test_phone_response_reuses_authenticated_ai_handler(self):
         request = AIResponseRequest(prompt="hello")
         principal = phone_module.Principal("tailscale:test", "Test User")
