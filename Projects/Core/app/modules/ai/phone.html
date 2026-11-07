@@ -27,8 +27,24 @@
       min-height: 100dvh;
       margin: 0 auto;
       display: grid;
-      grid-template-rows: auto 1fr auto;
+      grid-template-rows: auto auto 1fr auto;
     }
+    #approvals { display: grid; gap: .6rem; padding: .75rem 1rem 0; }
+    #approvals[hidden] { display: none; }
+    .approval {
+      padding: .85rem 1rem;
+      border-radius: 1rem;
+      border: 1px solid rgba(240, 184, 75, .45);
+      background: rgba(58, 42, 12, .55);
+      line-height: 1.45;
+    }
+    .approval h2 { margin: 0 0 .3rem; font-size: .78rem; letter-spacing: .12em; text-transform: uppercase; color: #f0c870; }
+    .approval .summary { color: #fff5df; overflow-wrap: anywhere; }
+    .approval .details { margin-top: .35rem; color: #c8b48c; font-size: .72rem; overflow-wrap: anywhere; }
+    .approval .actions { display: flex; gap: .5rem; margin-top: .7rem; }
+    .approval .actions button { flex: 1; height: 2.6rem; font-size: .9rem; }
+    .approval .reject { background: rgba(255, 255, 255, .12); color: #edf6ff; }
+    .approval.expired { opacity: .6; }
     header {
       padding: max(1rem, env(safe-area-inset-top)) 1rem .9rem;
       border-bottom: 1px solid rgba(151, 202, 232, .16);
@@ -120,6 +136,7 @@
         <div id="status" class="status"><span class="dot"></span><span>Connecting</span></div>
       </div>
     </header>
+    <section id="approvals" aria-label="Pending approvals" aria-live="polite" hidden></section>
     <main id="messages" aria-live="polite">
       <div id="welcome" class="welcome">
         <strong>Your private local assistant</strong>
@@ -140,7 +157,102 @@
     const send = document.querySelector('#send');
     const statusNode = document.querySelector('#status');
     const modelNode = document.querySelector('#model');
+    const approvalsNode = document.querySelector('#approvals');
     let conversationId = sessionStorage.getItem('marvisConversationId');
+
+    // Approval cards are built only with textContent so request data and
+    // MARVIS output can never be interpreted as markup.
+    function element(tag, className, text) {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text !== undefined) node.textContent = text;
+      return node;
+    }
+
+    function describeArguments(args) {
+      return Object.entries(args || {}).map(([key, value]) => `${key}: ${value}`).join(' · ');
+    }
+
+    function describeResult(data) {
+      if (data.status === 'rejected') return 'Rejected. Nothing was done.';
+      if (data.status === 'failed') return `Failed: ${data.outcome}`;
+      if (data.status !== 'executed') return `Request is ${data.status}.`;
+      try {
+        const result = JSON.parse(data.outcome);
+        if (result.order) {
+          const o = result.order;
+          return `Executed: paper ${o.side.toUpperCase()} ${o.quantity} ${o.symbol} at ${o.price} (${o.status}). Paper cash now ${result.cash_balance}.`;
+        }
+      } catch (error) { /* plain-text outcome */ }
+      return `Executed: ${data.outcome}`;
+    }
+
+    function updateCountdowns() {
+      for (const card of approvalsNode.querySelectorAll('.approval[data-expires]')) {
+        const remaining = Date.parse(card.dataset.expires) - Date.now();
+        const label = card.querySelector('.countdown');
+        if (remaining <= 0) {
+          card.classList.add('expired');
+          label.textContent = 'Expired';
+          for (const button of card.querySelectorAll('button')) button.disabled = true;
+        } else {
+          const minutes = Math.floor(remaining / 60000);
+          const seconds = String(Math.floor((remaining % 60000) / 1000)).padStart(2, '0');
+          label.textContent = `Expires in ${minutes}:${seconds}`;
+        }
+      }
+    }
+
+    const DECISION_PATHS = { approve: '/approve', reject: '/reject' };
+
+    async function decide(item, action, card) {
+      for (const button of card.querySelectorAll('button')) button.disabled = true;
+      try {
+        const response = await fetch(
+          `/phone/api/approvals/${encodeURIComponent(item.request_id)}${DECISION_PATHS[action]}`,
+          { method: 'POST', headers: { Accept: 'application/json' } },
+        );
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'The request could not be decided.');
+        addMessage('assistant', describeResult(data));
+      } catch (error) {
+        addMessage('error', error.message);
+      } finally {
+        loadApprovals();
+      }
+    }
+
+    function approvalCard(item) {
+      const card = element('article', 'approval');
+      card.dataset.expires = item.expires_at;
+      card.append(
+        element('h2', '', 'Approval needed'),
+        element('div', 'summary', item.summary),
+        element('div', 'details', describeArguments(item.arguments)),
+        element('div', 'details countdown', ''),
+      );
+      const actions = element('div', 'actions');
+      const approve = element('button', 'approve', 'Approve');
+      const reject = element('button', 'reject', 'Reject');
+      approve.type = 'button';
+      reject.type = 'button';
+      approve.addEventListener('click', () => decide(item, 'approve', card));
+      reject.addEventListener('click', () => decide(item, 'reject', card));
+      actions.append(approve, reject);
+      card.append(actions);
+      return card;
+    }
+
+    async function loadApprovals() {
+      try {
+        const response = await fetch('/phone/api/approvals', { headers: { Accept: 'application/json' } });
+        if (!response.ok) return;
+        const data = await response.json();
+        approvalsNode.replaceChildren(...data.approvals.map(approvalCard));
+        approvalsNode.hidden = data.approvals.length === 0;
+        updateCountdowns();
+      } catch (error) { /* keep the current cards */ }
+    }
 
     function addMessage(role, text) {
       document.querySelector('#welcome')?.remove();
@@ -197,6 +309,7 @@
         send.disabled = false;
         prompt.focus();
         messages.scrollTop = messages.scrollHeight;
+        loadApprovals();
       }
     });
 
@@ -218,6 +331,8 @@
     });
 
     loadStatus();
+    loadApprovals();
+    setInterval(updateCountdowns, 1000);
   </script>
 </body>
 </html>

@@ -249,7 +249,12 @@ POST /approvals/{request_id}/reject
 These require the Core bearer credential. The phone chat uses the same routes
 under `/phone/api/approvals`. Requests made through the phone can only be
 decided through the phone, and bearer requests only with the bearer credential.
-No ACTION capability is registered yet.
+
+The first ACTION is `trading.place_paper_order`. Ask MARVIS on the phone for a
+paper order (for example "place a paper buy of 0.01 BTC-GBP at 50000"); a
+**Pending approvals** card appears above the chat with Approve and Reject
+buttons. Orders over the limit, or that paper cash cannot cover, are refused
+before any approval is created. Everything stays simulated.
 
 ## Paper-order API
 

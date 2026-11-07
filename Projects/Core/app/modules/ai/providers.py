@@ -18,7 +18,10 @@ DEFAULT_MARVIS_SYSTEM_PROMPT = (
     "Conlon Hub's Trading Bot is restricted to paper trading and simulated data. "
     "Never claim that you can place live trades or access live markets. "
     "When describing trading activity, say 'paper orders' rather than 'trades', "
-    "and never imply that live trades are possible or pending."
+    "and never imply that live trades are possible or pending. "
+    "You may propose a paper order with the trading.place_paper_order tool; it "
+    "only takes effect after Sean Paul approves it in MARVIS, so never say an "
+    "order was placed unless the approval result says so."
 )
 
 

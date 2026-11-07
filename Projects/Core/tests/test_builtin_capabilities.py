@@ -8,7 +8,7 @@ from app.modules.tradingbot.models import OrderSide, PaperOrder
 
 
 class BuiltinCapabilityTests(unittest.TestCase):
-    def test_registry_contains_expected_read_capabilities(self):
+    def test_registry_contains_expected_capabilities(self):
         registry = build_capability_registry()
 
         expected = {
@@ -16,6 +16,7 @@ class BuiltinCapabilityTests(unittest.TestCase):
             "trading.status",
             "trading.paper_account",
             "trading.paper_orders",
+            "trading.place_paper_order",
         }
 
         self.assertEqual(
@@ -23,8 +24,14 @@ class BuiltinCapabilityTests(unittest.TestCase):
             expected,
         )
 
+        # The only ACTION is the paper order; everything else stays READ.
         for capability in registry.list():
-            self.assertEqual(capability.access, CapabilityAccess.READ)
+            expected_access = (
+                CapabilityAccess.ACTION
+                if capability.name == "trading.place_paper_order"
+                else CapabilityAccess.READ
+            )
+            self.assertEqual(capability.access, expected_access, capability.name)
 
     @patch("app.core.capabilities.builtin.get_loaded_modules")
     def test_system_modules_uses_existing_module_loader(self, get_loaded_modules):
