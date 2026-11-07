@@ -28,7 +28,7 @@ Key local URLs once running:
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests
 ```
-`unittest`-based. 426 tests as of 2026-11-07, covering TradingBot safety, auth,
+`unittest`-based. 438 tests as of 2026-11-07, covering TradingBot safety, auth,
 AI providers/router/orchestration, capabilities, approval gates, migrations,
 launcher, phone and ASGI smoke tests. Six "Security audit event could not be
 persisted." lines are expected: they come from tests exercising the

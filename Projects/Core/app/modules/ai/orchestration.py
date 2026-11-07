@@ -1,4 +1,5 @@
 ﻿import json
+import re
 from dataclasses import dataclass
 from inspect import signature
 from json import JSONDecodeError
@@ -12,6 +13,30 @@ from app.core.capabilities.registry import (
 
 
 TOOL_REQUEST_PREFIX = "MARVIS_TOOL_REQUEST:"
+
+NO_ORDER_PLACED_REPLY = (
+    "No paper order has been placed. Typing 'yes' or 'approve' here does not "
+    "approve anything. Orders only run after you tap Approve on a pending "
+    "request card."
+)
+
+# A model reply claiming an action happened. Nothing executes during a chat
+# turn (only the Approve button runs an action), so such a claim is false
+# unless it is reporting data from a READ tool in the same turn.
+_ACTION_CLAIM = re.compile(
+    r"\b(approval (has been )?received"
+    r"|(has|have|had) been (approved|placed|recorded|executed|submitted|confirmed)"
+    r"|(is|are) now (approved|placed|recorded|executed|submitted|confirmed)"
+    r"|(was|were) (approved|placed|recorded|executed|submitted))\b",
+    re.IGNORECASE,
+)
+
+# Short chat messages that look like an attempt to approve in the chat.
+_CHAT_APPROVAL = re.compile(
+    r"^(yes|y|yep|yeah|approve|approved|i approve|confirm|confirmed|"
+    r"go ahead|do it|proceed|place it)[\s.!]*$",
+    re.IGNORECASE,
+)
 
 
 class ToolExecutionDenied(PermissionError):
@@ -35,15 +60,16 @@ def parse_tool_request(response: str) -> ToolRequest | None:
     if not isinstance(response, str):
         raise TypeError("response must be a string.")
 
-    stripped = response.strip()
-
-    if not stripped.startswith(TOOL_REQUEST_PREFIX):
+    # Local models often wrap the request in prose or backticks; find it anywhere
+    # and decode the first JSON value after it, ignoring surrounding text.
+    start = response.find(TOOL_REQUEST_PREFIX)
+    if start == -1:
         return None
 
-    payload_text = stripped[len(TOOL_REQUEST_PREFIX):].strip()
+    payload_text = response[start + len(TOOL_REQUEST_PREFIX):].lstrip()
 
     try:
-        payload = json.loads(payload_text)
+        payload, _end = json.JSONDecoder().raw_decode(payload_text)
     except JSONDecodeError as error:
         raise ValueError("Tool request contains invalid JSON.") from error
 
@@ -83,6 +109,18 @@ class ToolOrchestrationError(ValueError):
 def _catalog_entry(item):
     return {"capability": item.name, "description": item.description,
             "parameters": str(signature(item.handler))}
+
+
+def _pending_pointer(pending) -> str:
+    count = len(pending)
+    noun = "request; tap Approve or Reject on its card" if count == 1 else (
+        "requests; tap Approve or Reject on their cards"
+    )
+    lines = "\n".join(f"- {item.summary}" for item in pending)
+    return (
+        "Typing here does not approve anything. "
+        f"You have {count} pending {noun}:\n{lines}"
+    )
 
 
 def _propose_action(capability, request, approvals, principal_id):
@@ -162,11 +200,20 @@ def generate_with_tools(provider, registry, prompt, history=(), max_tool_calls=3
             instructions += (
                 " You may also propose these ACTION capabilities with the same "
                 "request format. A proposal only creates a request for human "
-                "approval; nothing runs unless the human approves it. Proposable "
+                "approval; nothing runs unless the human taps Approve on the "
+                "request card. A chat reply such as 'yes' never approves "
+                "anything, so never say an action was approved, placed or "
+                "recorded. Proposable "
                 "ACTION capabilities: " + json.dumps(actions)
             )
     messages = (("system", instructions),) + tuple(history)
     current_prompt = prompt
+    if proposals_enabled and _CHAT_APPROVAL.match(prompt.strip()):
+        pending = approvals.list_pending(principal_id)
+        if pending:
+            return _pending_pointer(pending)
+
+    used_read_tool = False
     for step in range(max_tool_calls + 1):
         response = provider.generate(current_prompt, history=messages)
         if not isinstance(response, str) or not response.strip():
@@ -176,6 +223,8 @@ def generate_with_tools(provider, registry, prompt, history=(), max_tool_calls=3
         except (TypeError, ValueError) as error:
             raise ToolOrchestrationError("Invalid MARVIS tool request.") from error
         if request is None:
+            if not used_read_tool and _ACTION_CLAIM.search(response):
+                return NO_ORDER_PLACED_REPLY
             return response
         if step == max_tool_calls:
             raise ToolOrchestrationError("MARVIS tool call limit reached.")
@@ -199,6 +248,7 @@ def generate_with_tools(provider, registry, prompt, history=(), max_tool_calls=3
                                  allow_nan=False)
         except Exception as error:
             raise ToolOrchestrationError("MARVIS could not complete the READ tool request.") from error
+        used_read_tool = True
         messages += (("user", current_prompt), ("assistant", response))
         current_prompt = (
             "MARVIS_TOOL_RESULT: " + payload + "\n"

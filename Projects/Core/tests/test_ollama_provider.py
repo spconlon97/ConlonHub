@@ -42,6 +42,8 @@ class OllamaChatProviderTests(unittest.TestCase):
         self.assertIn("'paper orders' rather than 'trades'", DEFAULT_MARVIS_SYSTEM_PROMPT)
         self.assertIn("propose a paper order", DEFAULT_MARVIS_SYSTEM_PROMPT)
         self.assertIn("approves it", DEFAULT_MARVIS_SYSTEM_PROMPT)
+        self.assertIn("Approve button", DEFAULT_MARVIS_SYSTEM_PROMPT)
+        self.assertIn("never approves", DEFAULT_MARVIS_SYSTEM_PROMPT)
 
     def test_sends_chat_request_and_extracts_message_content(self):
         opener = RecordingOpener(
