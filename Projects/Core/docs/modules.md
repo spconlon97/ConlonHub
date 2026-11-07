@@ -48,6 +48,13 @@ All database paths are relative to the repository root (`Databases/`), not
   handler calls `TradingBot.place_paper_order()`, which re-checks every limit
   at approval time, and returns the order plus the new paper cash balance.
   [code][test]
+- **Chat safeguards (from the 2026-11-07 live test):** a tool request is found
+  anywhere in a model reply, including inside prose or backticks. A reply that
+  claims an action was approved/placed/recorded, when no READ tool supplied
+  data that turn, is replaced with a fixed "No paper order has been placed …"
+  message, because nothing executes during a chat turn. A short chat
+  "yes"/"approve" while requests are pending gets a fixed pointer to the cards
+  without calling the model. [code][test]
 - **Phone UI:** `/phone` shows a "Pending approvals" panel (summary, exact
   arguments, live expiry countdown, Approve/Reject) loaded from
   `/phone/api/approvals`, refreshed on load and after every reply; built with
