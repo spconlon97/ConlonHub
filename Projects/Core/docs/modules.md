@@ -55,6 +55,16 @@ All database paths are relative to the repository root (`Databases/`), not
   message, because nothing executes during a chat turn. A short chat
   "yes"/"approve" while requests are pending gets a fixed pointer to the cards
   without calling the model. [code][test]
+- **Phone pairing (Phase 4A):** `/phone/api/*` requires the Tailscale identity
+  header **and** a paired-device cookie. `scripts\pair_phone.ps1` issues a
+  one-time 6-digit code (5-minute expiry, burned after 5 wrong attempts);
+  `POST /phone/api/pair` redeems it and sets an `HttpOnly`/`Secure`/
+  `SameSite=Strict` cookie scoped to `/phone`. Only SHA-256 digests of codes
+  and tokens are stored (`core_auth.db`, migration component
+  `phone_devices`). `-List`/`-Revoke` manage devices. Unpaired attempts are
+  audited as `phone.authenticate` / `rejected`; pairing as `phone.pair`.
+  Does not defend against malware running as the owner's Windows user.
+  [code][test]
 - **Phone UI:** `/phone` shows a "Pending approvals" panel (summary, exact
   arguments, live expiry countdown, Approve/Reject) loaded from
   `/phone/api/approvals`, refreshed on load and after every reply; built with
@@ -98,8 +108,8 @@ All database paths are relative to the repository root (`Databases/`), not
 - **Tool use:** bounded, read-only tool orchestration (`orchestration.py`) over
   the Core capability registry. [code][test]
 - **Phone chat:** `GET /phone`, `GET /phone/api/status`, `POST /phone/api/respond`;
-  requires Tailscale Serve identity headers and a connection from the local
-  proxy. [README][test]
+  the page needs the Tailscale Serve identity header, and every `/phone/api/*`
+  route also needs a paired-device cookie (see Phone pairing above). [code][test]
 - **Providers:**
   - Ollama at `http://127.0.0.1:11434/api/chat`, default `qwen3.5:9b`. [code]
     Ollama 0.40.6 running with `qwen3.5:9b` (Q4_K_M) installed. [runtime]

@@ -134,6 +134,33 @@ def _create_approval_requests_table(connection: sqlite3.Connection) -> None:
     )
 
 
+def _create_phone_device_tables(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS phone_pairing_codes (
+            code_id TEXT PRIMARY KEY,
+            code_digest TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            used_at TEXT,
+            failed_attempts INTEGER NOT NULL DEFAULT 0
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS phone_devices (
+            device_id TEXT PRIMARY KEY,
+            principal_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            token_digest TEXT NOT NULL UNIQUE,
+            created_at TEXT NOT NULL,
+            revoked_at TEXT
+        )
+        """
+    )
+
+
 def _add_approval_outcome_column(connection: sqlite3.Connection) -> None:
     connection.execute("ALTER TABLE approval_requests ADD COLUMN outcome TEXT")
 
@@ -149,6 +176,9 @@ _MIGRATIONS: dict[str, tuple[tuple[int, str, Migration], ...]] = {
     "approvals": (
         (1, "create_approval_requests_table", _create_approval_requests_table),
         (2, "add_approval_outcome_column", _add_approval_outcome_column),
+    ),
+    "phone_devices": (
+        (1, "create_phone_device_tables", _create_phone_device_tables),
     ),
 }
 

@@ -9,11 +9,14 @@ from app.core.approvals.dependency import get_approval_repository
 from app.core.approvals.repository import SqliteApprovalRepository
 from app.core.approvals.router import get_capability_registry
 from app.core.auth.dependency import get_audit_repository, require_principal
+from app.core.auth.phone_devices import SqlitePhoneDeviceRepository
 from app.core.auth.principal import Principal
 from app.core.capabilities.models import Capability, CapabilityAccess
 from app.core.capabilities.registry import CapabilityRegistry
 from app.main import app
+from app.modules.ai.phone import get_phone_device_repository
 from tests.test_asgi_smoke import call_asgi
+from tests.test_phone_pairing_routes import paired_phone_headers
 
 
 _PHONE_LOGIN = "owner@example.com"
@@ -47,6 +50,9 @@ class ApprovalEndpointTests(unittest.TestCase):
         app.dependency_overrides[get_capability_registry] = lambda: self.registry
         app.dependency_overrides[get_audit_repository] = lambda: self.audit
         app.dependency_overrides[require_principal] = lambda: Principal("p-1", "Owner")
+        self.devices = SqlitePhoneDeviceRepository(Path(self._temp_dir.name) / "auth.db")
+        app.dependency_overrides[get_phone_device_repository] = lambda: self.devices
+        self.phone_headers = paired_phone_headers(self.devices, login=_PHONE_LOGIN)
 
     def tearDown(self):
         app.dependency_overrides.clear()
@@ -183,19 +189,19 @@ class ApprovalEndpointTests(unittest.TestCase):
         request = self._create(principal_id=_PHONE_PRINCIPAL)
         bearer_request = self._create()
 
-        status, body = self._call("GET", "/phone/api/approvals", headers=_PHONE_HEADERS)
+        status, body = self._call("GET", "/phone/api/approvals", headers=self.phone_headers)
         self.assertEqual(status, 200)
         self.assertEqual([i["request_id"] for i in body["approvals"]], [request.request_id])
 
         status, _ = self._call(
             "POST", f"/phone/api/approvals/{bearer_request.request_id}/approve",
-            headers=_PHONE_HEADERS,
+            headers=self.phone_headers,
         )
         self.assertEqual(status, 404)
 
         status, body = self._call(
             "POST", f"/phone/api/approvals/{request.request_id}/approve",
-            headers=_PHONE_HEADERS,
+            headers=self.phone_headers,
         )
         self.assertEqual(status, 200)
         self.assertEqual(body["status"], "executed")
@@ -206,13 +212,13 @@ class ApprovalEndpointTests(unittest.TestCase):
         request = self._create(principal_id=_PHONE_PRINCIPAL)
 
         status, body = self._call(
-            "GET", f"/phone/api/approvals/{request.request_id}", headers=_PHONE_HEADERS
+            "GET", f"/phone/api/approvals/{request.request_id}", headers=self.phone_headers
         )
         self.assertEqual(status, 200)
 
         status, body = self._call(
             "POST", f"/phone/api/approvals/{request.request_id}/reject",
-            headers=_PHONE_HEADERS,
+            headers=self.phone_headers,
         )
         self.assertEqual(body["status"], "rejected")
         self.handler.assert_not_called()
