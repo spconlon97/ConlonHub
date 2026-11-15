@@ -111,10 +111,33 @@ tailscale serve --bg 8000
 
 Install Tailscale on the phone and sign in to the same private network, then
 open the HTTPS address printed by Tailscale and add `/phone`. Tailscale Serve
-adds the signed-in user's identity headers to proxied requests. The phone
-routes reject requests without those headers and reject connections that do
-not arrive from the local proxy. Do not use Tailscale Funnel for MARVIS because
-Funnel makes a service public.
+adds the signed-in user's identity headers to proxied requests. Do not use
+Tailscale Funnel for MARVIS because Funnel makes a service public.
+
+### Pair the phone
+
+The Tailscale identity header alone is not proof: any program on the PC can
+call `127.0.0.1:8000` directly and set it. So each phone browser is paired
+once. On the PC, from `Projects\Core`:
+
+```powershell
+.\scripts\pair_phone.ps1
+```
+
+It shows a 6-digit code that works once and expires in 5 minutes (five wrong
+attempts cancel it). Open `/phone` on the phone, enter the code, and the
+browser receives a device cookie (`HttpOnly`, `Secure`, `SameSite=Strict`).
+Every `/phone/api/*` route then requires both the Tailscale header and that
+cookie. Only a SHA-256 digest of the cookie is stored, in `core_auth.db`.
+
+```powershell
+.\scripts\pair_phone.ps1 -List
+.\scripts\pair_phone.ps1 -Revoke "<device-id>"
+```
+
+Threat model: pairing stops other programs and other Windows users on the PC
+from acting as the phone. It does not stop malware running as your own Windows
+user, which could read the browser or the databases directly.
 
 ## Create the first API credential
 
